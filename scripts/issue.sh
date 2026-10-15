@@ -26,21 +26,32 @@ set -u
 conf="$root/.claude/coddy.yml"
 code=1
 
-# The process $1 runs. kill -0 needs no ps and sees this user's processes;
-# /proc sees everyone's on Linux, where images without ps live; ps comes
-# last, so a missing ps never reads as a dead owner. No pid counts as
-# running, as claim reads it.
-alive() { [ -z "$1" ] || kill -0 "$1" 2>/dev/null || [ -d "/proc/$1" ] || ps -p "$1" >/dev/null 2>&1; }
+# When process $1 started, as ps prints it with _ for spaces; empty when ps
+# cannot say (no ps, no such process).
+started() { [ -n "$1" ] && ps -o lstart= -p "$1" 2>/dev/null | awk '{$1=$1; gsub(/ /,"_")} 1'; }
+# The process $1 runs, and is the one that started at $2 when that is given:
+# a reused pid with another start time is gone. kill -0 needs no ps and sees
+# this user's processes; /proc sees everyone's on Linux, where images without
+# ps live; ps comes last, so a missing ps never reads as a dead owner, and a
+# start time ps cannot read counts as a match. No pid counts as running, as
+# claim reads it.
+alive() {
+  [ -z "$1" ] && return 0
+  kill -0 "$1" 2>/dev/null || [ -d "/proc/$1" ] || ps -p "$1" >/dev/null 2>&1 || return 1
+  now=$(started "$1"); [ -z "${2-}" ] || [ -z "$now" ] || [ "$now" = "$2" ]
+}
 die() { echo "coddy: $*" >&2; exit "$code"; }
 cfg() { sed -n "s/^$1:[[:space:]]*//p" "$conf" | sed "s/[[:space:]]*#.*$//; s/^[\"']//; s/[\"']$//" | head -1; }
-# The lock's owner ($sid, $pid) is this session ($me): the same session id, or
-# the same Claude Code process, since /clear changes the id and not the pid.
-# ponytail: a reused pid passes as the owner; compare process start times too
-# if that ever bites.
-mine() { [ "$sid" = "$me" ] || { [ -n "$pid" ] && [ "$pid" = "${CLAUDE_PID-}" ]; }; }
-# Issue $1's owner line, as claim wrote it ("<session> <pid>"), into $own,
-# $sid and $pid; all empty for a plain-file marker or a lock with no owner yet.
-owner() { own=$(cat "$root/.git/coddy/$1/owner" 2>/dev/null); sid="${own%% *}" pid="${own#* }"; pid="${pid%% *}"; }
+# The lock's owner ($sid, $pid, $start) is this session ($me): the same
+# session id, or the same Claude Code process, since /clear changes the id
+# and not the pid; a pid reused since the owner's start is not that process.
+mine() { [ "$sid" = "$me" ] || { [ -n "$pid" ] && [ "$pid" = "${CLAUDE_PID-}" ] && alive "$pid" "$start"; }; }
+# Issue $1's owner line, as claim wrote it ("<session> <pid> <start>"), into
+# $own, $sid, $pid and $start; all empty for a plain-file marker or a lock with
+# no owner yet, and $start for a line written before start times.
+owner() { own=$(cat "$root/.git/coddy/$1/owner" 2>/dev/null); read -r sid pid start _ <<<"$own"; }
+# This session's owner line.
+myline() { echo "$me ${CLAUDE_PID-} $(started "${CLAUDE_PID-}")"; }
 
 # The project root and its claimed issue worktrees, injected by /coddy:start,
 # /coddy:ship, /coddy:config and /coddy:next. A directory under .worktrees/
@@ -60,7 +71,7 @@ if [ "${1-}" = status ]; then
     b=$(cat ".git/coddy/$n.branch" 2>/dev/null); ws="$ws$n${b:+=$b} "
     b=$(cat ".git/coddy/$n.base" 2>/dev/null); [ -z "$b" ] || bases="$bases$n=$b "
     owner "$n"
-    if [ -z "$sid" ]; then o=unknown; elif mine; then o=me; elif alive "$pid"; then o="$sid (running)"; else o="$sid (gone)"; fi
+    if [ -z "$sid" ]; then o=unknown; elif mine; then o=me; elif alive "$pid" "$start"; then o="$sid (running)"; else o="$sid (gone)"; fi
     owners="$owners$n=$o "
   done
   echo "root: $root"
@@ -105,11 +116,11 @@ if [ "${1-}" = guard ]; then
       # session, and then the edit is not held to the owner.
       owner "$issue"
       [ -z "$sid" ] || [ -z "$me" ] || mine ||
-        die "the worktree of issue $issue belongs to session $sid (pid $pid, $(alive "$pid" && echo running || echo "not running")). Run /coddy:start $issue to take it over, or work on your own issue."
+        die "the worktree of issue $issue belongs to session $sid (pid $pid, $(alive "$pid" "$start" && echo running || echo "not running")). Run /coddy:start $issue to take it over, or work on your own issue."
       # The owner's edit from a new session id (/clear) or process (--resume)
       # moves the lock along, as its re-claim would: a pid left behind reads
       # as a dead owner to every other session.
-      [ -z "$sid" ] || [ -z "$me" ] || [ "$own" = "$me ${CLAUDE_PID-}" ] || echo "$me ${CLAUDE_PID-}" > "$root/.git/coddy/$issue/owner" 2>/dev/null ;;
+      [ -z "$sid" ] || [ -z "$me" ] || [ "$own" = "$(myline)" ] || myline > "$root/.git/coddy/$issue/owner" 2>/dev/null ;;
     "$root"/.claude/*) ;;
     "$root"/*) die "edits belong in an issue worktree, not the main checkout. Run /coddy:start <issue>, then edit under .worktrees/<issue>/." ;;
   esac
@@ -271,7 +282,7 @@ case "$cmd" in
       # (/clear changes the one, --resume the other); $own stays, for the trap.
       elif mine; then again=1
       elif [ "${3-}" = --take ]; then note="taken over: $issue from session $sid (--take)"
-      elif ! alive "$pid"; then note="taken over: $issue from session $sid (pid $pid is not running)"
+      elif ! alive "$pid" "$start"; then note="taken over: $issue from session $sid (pid $pid is not running)"
       else die "issue $issue is claimed by session $sid (pid $pid, running). To take it over deliberately: bash \"$0\" claim $issue --take"
       fi
     fi
@@ -281,7 +292,7 @@ case "$cmd" in
     # ponytail: the tracker is reachable only through MCP tools, so this
     # records the transition the skill just made instead of verifying it.
     # Upgrade path: a PostToolUse hook on the tracker's write tool.
-    echo "$me ${CLAUDE_PID-}" > "$lock/owner" || die "could not record the claim"
+    myline > "$lock/owner" || die "could not record the claim"
     trap - EXIT
     [ -z "$note" ] || echo "$note"
     if [ -n "$again" ]; then echo "claimed: $issue (already by this session)"; else echo "claimed: $issue"; fi ;;
@@ -293,7 +304,7 @@ case "$cmd" in
     # Held to the lock's owner as the guard is: a lock or a push that names
     # no session (a script run by hand) is not.
     me="${CLAUDE_CODE_SESSION_ID-}"; owner "$issue"
-    [ -z "$sid" ] || [ -z "$me" ] || mine || die "the worktree of issue $issue belongs to session $sid (pid $pid, $(alive "$pid" && echo running || echo "not running")). Ship it from that session, or run /coddy:start $issue to take it over."
+    [ -z "$sid" ] || [ -z "$me" ] || mine || die "the worktree of issue $issue belongs to session $sid (pid $pid, $(alive "$pid" "$start" && echo running || echo "not running")). Ship it from that session, or run /coddy:start $issue to take it over."
     # The branch create recorded, never one read off the history: once $base
     # is merged in, the history holds the branches of merged issues too.
     branch=$(cat "$rec" 2>/dev/null)
@@ -356,7 +367,7 @@ case "$cmd" in
       # guard and push hold to the lock's owner: a gone owner, a lock with no
       # owner or this session's own are swept.
       me="${CLAUDE_CODE_SESSION_ID-}"; owner "$issue"
-      if [ -n "$sid" ] && ! mine && alive "$pid"; then
+      if [ -n "$sid" ] && ! mine && alive "$pid" "$start"; then
         echo "kept: $issue (merged into $base, session $sid still holds it)"; continue
       fi
       if [ -n "$dirty" ]; then echo "kept: $issue (merged into $base, but $wt holds uncommitted work)"; continue; fi
