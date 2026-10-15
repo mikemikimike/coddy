@@ -3,6 +3,7 @@
 #   issue.sh create <issue> <branch> [base-issue]   worktree at .worktrees/<issue> on <branch>, from default_branch or the base issue's branch
 #   issue.sh claim  <issue> [--take]   lock the issue for this session, move it to In Progress
 #   issue.sh push   <issue> [message]  commit what is uncommitted, then push
+#   issue.sh state  <issue> [key=value | key+=value ...]   print, or set, the issue's phase state for start and ship
 #   issue.sh sweep                     remove what issues with a merged PR left behind
 #   issue.sh guard                     PreToolUse hook on Edit/Write (hooks/hooks.json)
 #   issue.sh snap | trip               Pre/PostToolUse hooks on Bash
@@ -382,5 +383,29 @@ case "$cmd" in
     done
     exit 0 ;;
 
-  *) die "usage: issue.sh create <issue> <branch> [base-issue] | claim <issue> [--take] | push <issue> [message] | sweep | status | guard" ;;
+  state)
+    # start's phase state: key=value lines in the lock directory, so sweep
+    # removes them with the lock. Anyone may read; only the lock's owner
+    # writes, held as push is. Values are written, never evaluated.
+    lock=".git/coddy/$issue" f=".git/coddy/$issue/state"
+    [ -e "$lock" ] || die "issue $issue is not In Progress. Run /coddy:start $issue."
+    [ $# -gt 2 ] || { cat "$f" 2>/dev/null; exit 0; }
+    [ -d "$lock" ] || die "issue $issue's claim is from before locks. Run /coddy:start $issue to re-claim it."
+    me="${CLAUDE_CODE_SESSION_ID-}"; owner "$issue"
+    [ -z "$sid" ] || [ -z "$me" ] || mine || die "the worktree of issue $issue belongs to session $sid. Run /coddy:start $issue to take it over."
+    shift 2
+    for kv; do
+      case "$kv" in *=*) ;; *) die "state takes key=value or key+=value, got '$kv'" ;; esac
+      k="${kv%%=*}" v="${kv#*=}" add=""
+      case "$k" in *+) add=1 k="${k%+}" ;; esac
+      case "$k" in ''|*[!a-z_]*) die "state keys are lower case words, got '$k'" ;; esac
+      case "$v" in *"
+"*) die "state values are one line" ;; esac
+      if [ -n "$add" ]; then
+        printf '%s=%s\n' "$k" "$v" >> "$f" || die "could not write $f"
+      else
+        { grep -v "^$k=" "$f" 2>/dev/null; printf '%s=%s\n' "$k" "$v"; } > "$f.tmp" && mv "$f.tmp" "$f" || die "could not write $f"
+      fi
+    done ;;
+  *) die "usage: issue.sh create <issue> <branch> [base-issue] | claim <issue> [--take] | push <issue> [message] | state <issue> [key=value ...] | sweep | status | guard" ;;
 esac
