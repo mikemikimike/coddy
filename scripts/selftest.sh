@@ -199,6 +199,25 @@ leg() {
   # The same worktree back, held by this session: swept as before.
   run create "$p" "ext/pr-$p" >/dev/null 2>&1 && mkdir ".git/coddy/$p" && echo "sess-a $$" > ".git/coddy/$p/owner"
   t 0 "$tool: sweep cleans a merged worktree this session holds" sh -c "CLAUDE_PROJECT_DIR='$repo' bash '$here/scripts/issue.sh' sweep | grep -qx 'cleaned: $p'"
+  # Squash and rebase merges leave no ancestor, so sweep finds the branch's
+  # two commits in main by patch id. A branch deleted from the remote
+  # without a merge is not finished.
+  for k in 40:squash 50:rebase 60:gone; do
+    s=$((n + ${k%%:*})) m=${k#*:}
+    run create "$s" "feat/$s-$m" >/dev/null 2>&1; run claim "$s" >/dev/null 2>&1
+    echo "$m" > ".worktrees/$s/$m.txt"; run push "$s" "feat($s): one" >/dev/null 2>&1
+    echo "$s" >> ".worktrees/$s/$m.txt"; run push "$s" "feat($s): two" >/dev/null 2>&1
+    (git clone -q -b main "$tmp/origin.git" "$tmp/$m$s" && cd "$tmp/$m$s" && git commit -q --allow-empty -m "main moves on" && case $m in
+      squash) git merge -q --squash "origin/feat/$s-$m" && git commit -q -m "feat($s): squashed" && git push -q origin main ;;
+      rebase) git rebase -q main "origin/feat/$s-$m" && git push -q origin HEAD:main ;;
+      gone) git push -q origin --delete "feat/$s-$m" ;;
+    esac) >/dev/null 2>&1
+    if [ "$m" = gone ]; then
+      run sweep >/dev/null 2>&1; t 0 "$tool: sweep keeps an unmerged worktree whose remote branch was deleted" test -d ".worktrees/$s"
+    else
+      t 0 "$tool: sweep cleans a $m-merged worktree" sh -c "CLAUDE_PROJECT_DIR='$repo' bash '$here/scripts/issue.sh' sweep | grep -qx 'cleaned: $s'"
+    fi
+  done
   # A worktree just started from main sits on main's own first-parent line
   # with nothing of its own yet: not finished.
   r=$((n + 30)); run create "$r" "feat/$r-fresh" >/dev/null 2>&1; run claim "$r" >/dev/null 2>&1
