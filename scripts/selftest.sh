@@ -281,6 +281,15 @@ tripped 2 "tripwire: new file" 'echo x > stray.txt'
 tripped 0 "tripwire: quiet when the new file is removed" 'rm stray.txt'
 tripped 2 "tripwire: tracked file deleted" 'rm README.md'
 git checkout -q README.md
+# A thousand dirty files cost one hash-object, not one each: a git on PATH
+# that logs every hash-object it runs.
+mkdir -p "$tmp/gitshim" "$repo/many"; real=$(command -v git)
+printf '#!/bin/sh\n[ "$1" = hash-object ] && echo x >> "%s"\nexec "%s" "$@"\n' "$tmp/hashes" "$real" > "$tmp/gitshim/git"; chmod +x "$tmp/gitshim/git"
+for i in $(seq 1000); do echo "$i" > "many/$i.txt"; done
+: > "$tmp/hashes"; PATH="$tmp/gitshim:$PATH" wire snap many
+t 0 "tripwire: 1000 dirty files are hashed by one hash-object" test "$(wc -l < "$tmp/hashes" | tr -d ' ')" = 1
+t 0 "tripwire: and each is in the snapshot" test "$(grep -c '^many/.* [0-9a-f]\{40\}$' "${TMPDIR:-/tmp}"/coddy-snap-*-many)" = 1000
+wire trip many 2>/dev/null; rm -r many
 # HEAD leaving the default branch is a change too, even for a pushed commit
 # with nothing dirty. A detached HEAD on the default branch's own history is
 # where jj leaves a synced checkout, so that one is quiet.
