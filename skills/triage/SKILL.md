@@ -19,7 +19,7 @@ Findings come from this conversation, or from `$ARGUMENTS` when given (a file pa
 ## Steps
 
 1. List the findings, one issue per finding. Merge duplicates.
-2. Fetch open issues: github `search_issues` with `owner` and `repo` from `repo`, `query: "is:open"`, `perPage: 100` and `fields: [number, title, labels]`; jira `searchJiraIssuesUsingJql` with JQL `project = <project> AND statusCategory != Done`. A finding already covered by an open issue is skipped and cited.
+2. Search for each finding, never one list of all open issues (it stops at a page and misses the rest): 2-4 distinctive words from the finding, then github `search_issues` with `owner` and `repo` from `repo`, `query: "is:open in:title <words>"` and `fields: [number, title, labels]`; jira `searchJiraIssuesUsingJql` with JQL `project = <project> AND statusCategory != Done AND summary ~ "<words>"`. No hit → once more with other words. A finding a hit already covers is skipped and cited.
 3. Show a table: title, label, covered-by. Ask once to confirm.
 4. Create each issue (github `issue_write` `create` with `title`, `body` and `labels`; jira `createJiraIssue`) with this body:
    - **Problem**: what is wrong, with evidence (`file:line`, command output).
