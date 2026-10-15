@@ -161,6 +161,10 @@ commit: "{type}({issue}): {summary}"
 verify: "make check"         # must exit 0 before /coddy:ship opens the PR
 roadmap: docs/ROADMAP.md     # optional; /coddy:next reads it
 guard: block                 # optional; block (default) | warn
+tiers:                       # model per difficulty, per agent; start picks one per issue
+  claude: {low: haiku, medium: sonnet, high: opus}
+review_block: high           # optional; critical | high | medium | low (default high)
+review_rounds: 3             # optional; 1-5 (default 3)
 ```
 
 - `worktree` picks what creates each issue's worktree: `jj` (`jj workspace
