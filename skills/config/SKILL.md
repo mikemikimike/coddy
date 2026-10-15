@@ -1,6 +1,6 @@
 ---
 name: config
-description: Show or change the project's coddy settings in .claude/coddy.yml
+description: Show or change the project's coddy settings in .coddy.yml
 when_to_use: Use when the user asks to view, edit, change or update coddy settings for an onboarded project, such as the tracker, worktree tool, default branch, branch or commit pattern, verify command, roadmap or edit guard mode.
 argument-hint: "[key=value ...]"
 allowed-tools: Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/config.sh"), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" status)
@@ -33,10 +33,11 @@ allowed-tools: Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/config.sh"), Bash(bash "
 
 ## Steps
 
-1. The requested change is `$ARGUMENTS` (`key=value` pairs or plain words), else what the user asked for in this conversation. Nothing requested → show the current config, then ask in ONE AskUserQuestion call, each current value first and marked `(current)`: `worktree` (jj, git), `tracker` (github, jira), `guard` (block, warn), and a multi-select of the free-text settings to change (`default_branch`, `branch` and `commit` patterns, `verify`, `roadmap`, `tiers`, `review_block`, `review_rounds`). Then ask for the new value of each setting picked there. Everything left as it is → say nothing changed and stop.
-2. Check every change against Keys. Unknown key or invalid value → say which and stop. A new `tracker` without its companion keys → ask for them in one question.
-3. `worktree` changes while Worktrees lists an issue → stop and say: ship or remove those worktrees first, an issue cannot switch tools midway.
-4. Edit `.claude/coddy.yml` under `root`: change only the requested keys and keep every other line, comments included.
-5. Print each changed key as old → new and stop.
+1. Worktrees says `config: .claude/coddy.yml` → the config is at its old path: offer the move to `.coddy.yml` first, before any other change. Yes → write `.coddy.yml` under `root` with the Write tool, the file's content as it is (the guard asks the user to allow it), then print `rm .claude/coddy.yml` for the user to run in their own terminal: the config lock restores a shell delete. No → leave it where it is.
+2. The requested change is `$ARGUMENTS` (`key=value` pairs or plain words), else what the user asked for in this conversation. Nothing requested → show the current config, then ask in ONE AskUserQuestion call, each current value first and marked `(current)`: `worktree` (jj, git), `tracker` (github, jira), `guard` (block, warn), and a multi-select of the free-text settings to change (`default_branch`, `branch` and `commit` patterns, `verify`, `roadmap`, `tiers`, `review_block`, `review_rounds`). Then ask for the new value of each setting picked there. Everything left as it is → say nothing changed and stop.
+3. Check every change against Keys. Unknown key or invalid value → say which and stop. A new `tracker` without its companion keys → ask for them in one question.
+4. `worktree` changes while Worktrees lists an issue → stop and say: ship or remove those worktrees first, an issue cannot switch tools midway.
+5. Edit the config (`config` under Worktrees, or `.coddy.yml` once step 1 wrote it) under `root`: change only the requested keys and keep every other line, comments included.
+6. Print each changed key as old → new and stop.
 
 This skill changes nothing but that file.
