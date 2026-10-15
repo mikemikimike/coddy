@@ -27,7 +27,7 @@ allowed-tools: Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/config.sh"), Bash(bash "
 - `verify`: a shell command that exits 0 when the work can ship.
 - `roadmap`: path to an existing file. Optional, so it can be removed.
 - `guard`: `block` or `warn`. Optional, so it can be removed; absent means `block`. `warn` only when the user asked for it in so many words, never to get a rejected edit through.
-- `tiers.claude`: the model per difficulty for one agent, as `{low: <model>, medium: <model>, high: <model>}`, in names that agent accepts. Other agents get their own line (`tiers.codex`, `tiers.gemini`, …); add one when a teammate uses another agent.
+- `tiers.claude`: the model per difficulty for one agent, as `{low: <model>, medium: <model>, high: <model>}`, in names that agent accepts. All three levels are required. Other agents get their own line (`tiers.codex`, `tiers.gemini`, …); add one when a teammate uses another agent.
 - `review_block`: `critical`, `high`, `medium` or `low`. Optional; absent means `high`. Findings at or above it make start run another fix round.
 - `review_rounds`: a whole number from 1 to 5. Optional; absent means `3`.
 

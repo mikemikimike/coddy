@@ -131,6 +131,7 @@ leg() {
   t 1 "$tool: and never evaluated" test -e "$tmp/pwned"
   t 1 "$tool: state refuses a key that is not lower case" run state "$n" Phase=x
   t 1 "$tool: state refuses an argument without =" run state "$n" phase
+  run state "$n" phase=keep >/dev/null 2>&1; t 1 "$tool: a bad key refuses the whole write" run state "$n" phase=gone Bad=x; t 0 "$tool: and writes none of it" says "^phase=keep$" run state "$n"; run state "$n" phase=review >/dev/null 2>&1
   t 1 "$tool: state refuses another running session's write" as sess-b 1 state "$n" phase=done
   t 0 "$tool: that refusal names the owner" says "belongs to session sess-a" as sess-b 1 state "$n" phase=done
   t 0 "$tool: another session may read it" says "^phase=review$" as sess-b 1 state "$n"

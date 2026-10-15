@@ -394,13 +394,17 @@ case "$cmd" in
     me="${CLAUDE_CODE_SESSION_ID-}"; owner "$issue"
     [ -z "$sid" ] || [ -z "$me" ] || mine || die "the worktree of issue $issue belongs to session $sid. Run /coddy:start $issue to take it over."
     shift 2
-    for kv; do
+    for kv; do # validate everything first: a bad argument writes nothing
       case "$kv" in *=*) ;; *) die "state takes key=value or key+=value, got '$kv'" ;; esac
-      k="${kv%%=*}" v="${kv#*=}" add=""
-      case "$k" in *+) add=1 k="${k%+}" ;; esac
+      k="${kv%%=*}" v="${kv#*=}"
+      case "$k" in *+) k="${k%+}" ;; esac
       case "$k" in ''|*[!a-z_]*) die "state keys are lower case words, got '$k'" ;; esac
       case "$v" in *"
 "*) die "state values are one line" ;; esac
+    done
+    for kv; do
+      k="${kv%%=*}" v="${kv#*=}" add=""
+      case "$k" in *+) add=1 k="${k%+}" ;; esac
       if [ -n "$add" ]; then
         printf '%s=%s\n' "$k" "$v" >> "$f" || die "could not write $f"
       else
