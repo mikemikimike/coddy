@@ -22,8 +22,7 @@
 # reject the command's result when it left new changes there.
 set -u
 
-root="${CLAUDE_PROJECT_DIR:-$PWD}"
-case "$root" in */.worktrees/*) root="${root%%/.worktrees/*}" ;; esac
+. "${0%/*}/root.sh"
 conf="$root/.claude/coddy.yml"
 code=1
 

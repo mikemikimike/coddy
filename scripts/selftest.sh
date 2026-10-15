@@ -341,6 +341,21 @@ rm -r .git/coddy/other; : > .git/coddy/other
 t 0 "tree.sh owners: a marker from before locks is unknown" owns "other=unknown"
 rm .git/coddy/other
 t 0 "config.sh finds the config from inside a worktree" sh -c "CLAUDE_PROJECT_DIR='$repo/.worktrees/43' bash '$here/scripts/config.sh' | grep -q '^tracker:'"
+# rooted <dir>: a session opened in that directory gets the project root from
+# every script: tree.sh prints it, config.sh and detect.sh find the config,
+# and the guard holds the main checkout's README to it
+rooted() (
+  export CLAUDE_PROJECT_DIR=$1
+  bash "$here/scripts/tree.sh" | grep -qx "root: $repo" || exit 1
+  bash "$here/scripts/config.sh" | grep -q '^tracker:' || exit 1
+  bash "$here/scripts/detect.sh" | grep -qx 'config: present' || exit 1
+  printf '{"tool_input":{"file_path":"%s"}}' "$repo/README.md" | bash "$here/scripts/issue.sh" guard
+  [ $? = 2 ]
+)
+mkdir -p sub/dir; git worktree add -q .claude/worktrees/x 2>/dev/null
+for d in "" /sub/dir /.worktrees/43 /.claude/worktrees/x; do t 0 "root: resolved from ${d:-the repo root}" rooted "$repo$d"; done
+[ ! -d .worktrees/42 ] || t 0 "root: resolved from a jj workspace" rooted "$repo/.worktrees/42"
+git worktree remove --force .claude/worktrees/x; rm -r sub
 # detect <line> [VAR=value...]: detect.sh prints exactly that line
 detect() { line=$1; shift; env CLAUDE_PROJECT_DIR="$repo" "$@" "$BASH" "$here/scripts/detect.sh" 2>/dev/null | grep -qx "$line"; }
 t 0 "detect.sh reports an installed jq" detect 'jq: installed'
