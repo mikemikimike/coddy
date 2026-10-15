@@ -1,6 +1,6 @@
 # Roadmap
 
-coddy's purpose stays the same: **every change an agent makes is tied to a claimed issue, lives in its own worktree, and lands through a pull request, enforced by tooling rather than by prompts.**
+coddy's purpose stays the same: **every change an agent makes is tied to a claimed issue, lives in its own worktree, and lands through a pull request, enforced by tooling rather than by prompts.** Within one issue, coddy also runs its own stage from the agreed plan to a reviewed diff: an implementer on a model matched to the issue's difficulty, two hardening passes, and a code and security review loop.
 
 What this roadmap changes is reach and concurrency. coddy aims to support **Claude Code, Codex, Cursor and Copilot CLI** first-class, and to stay correct when several terminals, a lead session with subagents or agent teams, or several teammates work the same repository.
 
@@ -19,7 +19,7 @@ Each phase below is a [GitHub milestone](https://github.com/mnsami/coddy/milesto
 
 - **Parallel-safe** (M1): sessions and agents can't corrupt each other's work.
 - **Parallel-convenient** (M5): running several at once is pleasant, not just safe.
-- **Parallel-orchestrated**: launching and coordinating agents. Out of scope; that stays with other tools, with coddy guarding underneath.
+- **Parallel-orchestrated**: launching and coordinating agents across issues. Out of scope; that stays with other tools, with coddy guarding underneath. Sub-agents inside one issue's stage are coddy's own (#88).
 
 ## Milestones
 
@@ -38,9 +38,10 @@ Make parallel sessions safe on Claude Code, add the PR check, lower adoption fri
 - #25 PR check: fail PRs that aren't linked to a claimed, in-progress issue
 - #26 Run the test window: dogfooding and 5 cold onboarding sessions
 - #13 Add a warn mode for the edit guard
+- #88 Redesign start: think with the user, tier by difficulty, implement, harden, review and security loop
 - #17 Add repo description, topics and a demo of the guard
 
-Go signals: still in use at the end of 4 weeks of dogfooding; at least 3 of 5 cold users finish onboarding and ship a PR; at least 2 people outside the project file issues or PRs.
+Go signals: still in use at the end of 4 weeks of dogfooding; at least 3 of 5 cold users finish onboarding and ship a PR; at least 2 people outside the project file issues or PRs; cold users ship a PR that passed start's review loop.
 
 ### M2 · Agent-agnostic core
 Extract a `coddy` CLI core with no Claude Code dependencies; Claude Code becomes the first adapter.
