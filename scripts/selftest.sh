@@ -57,6 +57,7 @@ mkdir .claude
 echo note > notes.txt; : > empty.txt # untracked on purpose: jj must not make these look like changes
 
 t 1 "no skill disables model invocation" grep -rq disable-model-invocation "$here/skills"
+t 1 "no skill names a vendor skill" grep -rqE 'superpowers|code-review:' "$here/skills"
 # The config schema has three copies. yamlkeys reads the yaml block under a
 # "## Config" heading (README comments out its jira lines, so a leading "# "
 # is dropped), naming a nested key parent.child and leaving out a bare
