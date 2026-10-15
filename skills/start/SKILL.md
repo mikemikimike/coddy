@@ -3,7 +3,7 @@ name: start
 description: Start or continue work on a tracked issue by moving it to In Progress and giving it its own worktree, on a new branch or on the branch of an existing PR
 when_to_use: Use whenever the user asks to start, pick up, work on, fix or implement a GitHub issue or Jira ticket (issue 42, ABC-123, an issue URL), or to continue an existing pull request or branch (resolve its conflicts, address review comments, rebase it), before touching any code for it. Pass the bare issue number or Jira key as the argument, followed by onto and another issue to stack the new branch on that issue's branch (issue 22 onto 21). For a pull request, pass the issue it closes, or the PR number when it closes none.
 arguments: [issue, onto, base]
-allowed-tools: Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/config.sh"), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/tree.sh"), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" create *), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" claim *), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" sweep), mcp__plugin_github_github__issue_read, mcp__plugin_github_github__issue_write, mcp__plugin_github_github__pull_request_read, mcp__plugin_github_github__list_pull_requests, mcp__plugin_github_github__get_me, mcp__plugin_github_github__add_issue_comment
+allowed-tools: Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/config.sh"), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" status), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" create *), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" claim *), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" sweep), mcp__plugin_github_github__issue_read, mcp__plugin_github_github__issue_write, mcp__plugin_github_github__pull_request_read, mcp__plugin_github_github__list_pull_requests, mcp__plugin_github_github__get_me, mcp__plugin_github_github__add_issue_comment
 ---
 
 # Start issue $issue
@@ -15,7 +15,7 @@ allowed-tools: Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/config.sh"), Bash(bash "
 !`bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" sweep`
 
 ## Worktrees
-!`bash "${CLAUDE_PLUGIN_ROOT}/scripts/tree.sh"`
+!`bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" status`
 
 `NOT_ONBOARDED` → stop and say: run `/coddy:onboard` first.
 Lines under Cleaned up → say so first, in one sentence. `cleaned` is an issue whose PR merged and whose worktree was removed, so it has no worktree even if Worktrees still lists it; `kept` is a merged one whose worktree still holds work to push or discard, or that another running session still holds.

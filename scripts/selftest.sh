@@ -2,7 +2,7 @@
 # Runs the scripts against a throwaway repo with a local bare remote: both
 # worktree tools, the claim and its lock, the push, the sweep, the edit
 # guard, the shell tripwire, the PR check's run block (against a stub gh,
-# the one place gh remains: GitHub Actions) and tree.sh's owners line.
+# the one place gh remains: GitHub Actions) and issue.sh status's owners line.
 # Usage: bash scripts/selftest.sh
 set -u
 here="$(cd "$(dirname "$0")/.." && pwd)"
@@ -149,7 +149,7 @@ leg() {
   t 0 "$tool: and records the base" grep -qx "feat/$n-thing" ".git/coddy/$q.base"
   t 0 "$tool: a worktree started from the default branch records no base" test ! -e ".git/coddy/$n.base"
   t 0 "$tool: claim the stacked issue" run claim "$q"
-  t 0 "$tool: tree.sh lists the base" sh -c "CLAUDE_PROJECT_DIR='$repo' bash '$here/scripts/tree.sh' | grep -q '^bases: .*$q=feat/$n-thing'"
+  t 0 "$tool: issue.sh status lists the base" sh -c "CLAUDE_PROJECT_DIR='$repo' bash '$here/scripts/issue.sh' status | grep -q '^bases: .*$q=feat/$n-thing'"
   echo s > ".worktrees/$q/s.txt"; was=$(git ls-remote origin "refs/heads/feat/$n-thing")
   t 0 "$tool: push of the stacked branch" run push "$q" "feat($q): stacked"
   t 0 "$tool: the stacked branch reached the remote" git ls-remote --exit-code origin "refs/heads/feat/$q-stack"
@@ -322,31 +322,31 @@ tripped 2 "config: a shell edit to a shared config still trips" 'echo "verify: t
 t 1 "config: the shell edit to a shared config is undone" grep -q '^verify: true' .claude/coddy.yml
 
 mkdir -p .worktrees/other
-t 0 "tree.sh lists a claimed issue with its branch" sh -c "CLAUDE_PROJECT_DIR='$repo' bash '$here/scripts/tree.sh' | grep -q '^worktrees: .*43=feat/43-thing'"
-t 1 "tree.sh skips an unclaimed directory" sh -c "CLAUDE_PROJECT_DIR='$repo' bash '$here/scripts/tree.sh' | grep -q other"
-# owns <issue=owner> [session] [pid]: tree.sh, run as that session, lists that owner
-owns() { CLAUDE_CODE_SESSION_ID=${2-sess-a} CLAUDE_PID=${3-$$} CLAUDE_PROJECT_DIR="$repo" bash "$here/scripts/tree.sh" | grep -q "^owners: .*$1"; }
-t 0 "tree.sh owners: this session's claim is me" owns "43=me"
-t 0 "tree.sh owners: still me under a new session id (/clear)" owns "43=me" sess-b
-t 0 "tree.sh owners: still me from a new process (--resume)" owns "43=me" sess-a 1
+t 0 "issue.sh status lists a claimed issue with its branch" sh -c "CLAUDE_PROJECT_DIR='$repo' bash '$here/scripts/issue.sh' status | grep -q '^worktrees: .*43=feat/43-thing'"
+t 1 "issue.sh status skips an unclaimed directory" sh -c "CLAUDE_PROJECT_DIR='$repo' bash '$here/scripts/issue.sh' status | grep -q other"
+# owns <issue=owner> [session] [pid]: issue.sh status, run as that session, lists that owner
+owns() { CLAUDE_CODE_SESSION_ID=${2-sess-a} CLAUDE_PID=${3-$$} CLAUDE_PROJECT_DIR="$repo" bash "$here/scripts/issue.sh" status | grep -q "^owners: .*$1"; }
+t 0 "issue.sh status owners: this session's claim is me" owns "43=me"
+t 0 "issue.sh status owners: still me under a new session id (/clear)" owns "43=me" sess-b
+t 0 "issue.sh status owners: still me from a new process (--resume)" owns "43=me" sess-a 1
 mkdir .git/coddy/other; echo "sess-d $(sh -c 'echo $$')" > .git/coddy/other/owner # that shell has exited
-t 0 "tree.sh owners: another session whose process exited is gone" owns "other=sess-d (gone)"
+t 0 "issue.sh status owners: another session whose process exited is gone" owns "other=sess-d (gone)"
 echo "sess-e 1" > .git/coddy/other/owner
-t 0 "tree.sh owners: another session whose process runs is running" owns "other=sess-e (running)"
+t 0 "issue.sh status owners: another session whose process runs is running" owns "other=sess-e (running)"
 echo "sess-e $$" > .git/coddy/other/owner
-PATH="$tmp/nops:$PATH" t 0 "tree.sh owners: a running process is running with no ps on PATH" owns "other=sess-e (running)" sess-a 1
+PATH="$tmp/nops:$PATH" t 0 "issue.sh status owners: a running process is running with no ps on PATH" owns "other=sess-e (running)" sess-a 1
 echo "sess-f " > .git/coddy/other/owner
-t 0 "tree.sh owners: another session without a pid is running, as claim reads it" owns "other=sess-f (running)"
+t 0 "issue.sh status owners: another session without a pid is running, as claim reads it" owns "other=sess-f (running)"
 rm -r .git/coddy/other; : > .git/coddy/other
-t 0 "tree.sh owners: a marker from before locks is unknown" owns "other=unknown"
+t 0 "issue.sh status owners: a marker from before locks is unknown" owns "other=unknown"
 rm .git/coddy/other
 t 0 "config.sh finds the config from inside a worktree" sh -c "CLAUDE_PROJECT_DIR='$repo/.worktrees/43' bash '$here/scripts/config.sh' | grep -q '^tracker:'"
 # rooted <dir>: a session opened in that directory gets the project root from
-# every script: tree.sh prints it, config.sh and detect.sh find the config,
+# every script: issue.sh status prints it, config.sh and detect.sh find the config,
 # and the guard holds the main checkout's README to it
 rooted() (
   export CLAUDE_PROJECT_DIR=$1
-  bash "$here/scripts/tree.sh" | grep -qx "root: $repo" || exit 1
+  bash "$here/scripts/issue.sh" status | grep -qx "root: $repo" || exit 1
   bash "$here/scripts/config.sh" | grep -q '^tracker:' || exit 1
   bash "$here/scripts/detect.sh" | grep -qx 'config: present' || exit 1
   printf '{"tool_input":{"file_path":"%s"}}' "$repo/README.md" | bash "$here/scripts/issue.sh" guard
