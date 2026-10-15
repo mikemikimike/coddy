@@ -281,6 +281,11 @@ tripped 2 "tripwire: new file" 'echo x > stray.txt'
 tripped 0 "tripwire: quiet when the new file is removed" 'rm stray.txt'
 tripped 2 "tripwire: tracked file deleted" 'rm README.md'
 git checkout -q README.md
+wire snap mv; git mv README.md MOVED.md
+wire trip mv 2>"$tmp/trip.err"; got=$?
+t 0 "tripwire: a staged rename trips" test "$got" = 2
+t 0 "tripwire: and names both of its paths whole" grep -q 'main checkout: MOVED.md README.md\.' "$tmp/trip.err"
+git mv MOVED.md README.md
 # A thousand dirty files cost one hash-object, not one each: a git on PATH
 # that logs every hash-object it runs.
 mkdir -p "$tmp/gitshim" "$repo/many"; real=$(command -v git)

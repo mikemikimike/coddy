@@ -137,9 +137,14 @@ snap() {
   fi
   files=() n=0
   while IFS= read -r -d '' e; do
-    p="${e:3}"
-    case "$p" in .claude/*) continue ;; esac
-    if [ -f "$p" ]; then files[n]="$p"; n=$((n+1)); else printf '%s gone\n' "$p"; fi
+    # A staged rename or copy carries its source in the next field: a rename's
+    # source then reads as gone.
+    set -- "${e:3}"
+    case "$e" in [RC]*) IFS= read -r -d '' o; set -- "$1" "$o" ;; esac
+    for p; do
+      case "$p" in .claude/*) continue ;; esac
+      if [ -f "$p" ]; then files[n]="$p"; n=$((n+1)); else printf '%s gone\n' "$p"; fi
+    done
   done < <(git status --porcelain -uall -z 2>/dev/null)
   [ "$n" -gt 0 ] || return 0
   printf '%s\n' "${files[@]}" | git hash-object --stdin-paths 2>/dev/null |
