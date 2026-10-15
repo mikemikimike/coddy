@@ -3,7 +3,7 @@ name: start
 description: Start or continue work on a tracked issue by moving it to In Progress and giving it its own worktree, on a new branch or on the branch of an existing PR
 when_to_use: Use whenever the user asks to start, pick up, work on, fix or implement a GitHub issue or Jira ticket (issue 42, ABC-123, an issue URL), or to continue an existing pull request or branch (resolve its conflicts, address review comments, rebase it), before touching any code for it. Pass the bare issue number or Jira key as the argument, followed by onto and another issue to stack the new branch on that issue's branch (issue 22 onto 21). For a pull request, pass the issue it closes, or the PR number when it closes none.
 arguments: [issue, onto, base]
-allowed-tools: Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/config.sh"), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/tree.sh"), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" create *), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" claim *), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" sweep), mcp__plugin_github_github__issue_read, mcp__plugin_github_github__issue_write, mcp__plugin_github_github__pull_request_read, mcp__plugin_github_github__list_pull_requests, mcp__plugin_github_github__get_me
+allowed-tools: Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/config.sh"), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/tree.sh"), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" create *), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" claim *), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" sweep), mcp__plugin_github_github__issue_read, mcp__plugin_github_github__issue_write, mcp__plugin_github_github__pull_request_read, mcp__plugin_github_github__list_pull_requests, mcp__plugin_github_github__get_me, mcp__plugin_github_github__add_issue_comment
 ---
 
 # Start issue $issue
@@ -37,7 +37,7 @@ Paths below are relative to `root`.
 1. Fetch the issue with its comments.
    - github: `issue_read` `get`, then `get_comments`, with `owner` and `repo` from `repo`. `get` also returns the assignees, labels and `closed_by_pull_requests` that steps 3 and 4 read.
    - jira: the Atlassian MCP tools (`getJiraIssue`, then its comments). If none are loaded, stop and say the atlassian plugin needs to be authenticated.
-2. Restate in at most 10 lines: goal, acceptance criteria, out of scope. No acceptance criteria in the issue → ask one question to pin them down before continuing.
+2. Restate in at most 10 lines: goal, acceptance criteria, out of scope.
 3. Create the worktree: `bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" create $issue <branch>`, or with `$base` set `bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" create $issue <branch> $base`. It continues `<branch>` when that branch exists, locally or on the remote, and starts it from `default_branch` otherwise, or from issue `$base`'s branch, which it records so that `ship` opens the PR against it. An existing worktree for `$issue` is reused when it is on `<branch>`. `<branch>` is the first of these that applies:
    - The user named a branch → that branch. The user named a PR → `pull_request_read` `get` (`owner` and `repo` from `repo`, or from the PR's URL under jira): its branch is `head.ref`. Its `head.repo.full_name` is another repository → stop and say a PR from a fork cannot be continued.
    - The issue has an open PR → its `head.ref`.
@@ -52,5 +52,9 @@ Paths below are relative to `root`.
    - jira: read the ticket (`getJiraIssue`): assigned to someone else, or In Progress and not to me → stop and say who has it; take it over only when the user says so: assign to me, then the steps below with `claim $issue --take` in place of `claim $issue`. No open PR → assign to me, then `getTransitionsForJiraIssue` and `transitionJiraIssue` into the In Progress status (already there → no transition; no such transition → stop and list the available ones), then `getJiraIssue` again: status not In Progress or assignee not me → stop and report, no claim. Then, open PR or not, `bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" claim $issue` to record it.
 
    Either tracker: `claim` is refused because another session holds the claim and is running, or a claim is in flight → stop and ask the user whether to take it over; only on a yes run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" claim $issue --take`. `claim` reports a takeover → say so in one line, naming the session it was taken from, and continue.
-5. Investigate the code in the worktree. When the change spans more than three files or touches a public contract (API, schema, CLI flags), post the plan as an issue comment before editing.
+5. Investigate the code in the worktree, then agree on the work with the user. No edit before they have.
+   - A brainstorming or planning skill is available (such as `superpowers:brainstorming`) → run it for this step instead of the next two bullets.
+   - Trivial (clear acceptance criteria, one obvious change) → state the change in one line and ask to go ahead.
+   - Otherwise → list the open questions and assumptions; more than one reasonable approach → each one, with a recommendation. No acceptance criteria in the issue → one question pins them down. Ask them all in ONE AskUserQuestion call; not available (headless) → print them and stop.
+   - Not trivial → post the agreed acceptance criteria and approach as an issue comment: github `add_issue_comment`; jira the ticket comment tool.
 6. Implement in `.worktrees/$issue` only. Commit messages follow the `commit` pattern. A jj worktree has no `.git`: commit with `jj commit -m`, never `git`. When done, say: run `/coddy:ship`.

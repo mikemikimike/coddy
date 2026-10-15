@@ -73,7 +73,7 @@ The next `next` or `start` sweeps up what the merge left behind.
 | `/coddy:onboard` | Detects the project, asks for what it can't infer, writes `.claude/coddy.yml` |
 | `/coddy:config [key=value ...]` | Shows `.claude/coddy.yml`, or changes the keys you name |
 | `/coddy:next` | Recommends the next issue from the tracker and the roadmap, setting aside issues in progress, assigned to someone else, or claimed on this machine |
-| `/coddy:start <issue> [onto <base-issue>]` | Fetches the issue, restates its acceptance criteria, claims it, moves it to In Progress and gives it its own worktree in `.worktrees/<issue>` on a new branch. Name a PR or branch, or let the issue's open PR be found: that branch instead. `onto` starts from another issue's branch instead of the default branch |
+| `/coddy:start <issue> [onto <base-issue>]` | Fetches the issue, restates its acceptance criteria, claims it, moves it to In Progress and gives it its own worktree in `.worktrees/<issue>` on a new branch, then asks its open questions and proposes approaches, and edits nothing until you agree. Name a PR or branch, or let the issue's open PR be found: that branch instead. `onto` starts from another issue's branch instead of the default branch |
 | `/coddy:ship [issue]` | Runs `verify` in the issue's worktree, commits, pushes, opens the PR and links it back to the issue. Started `onto` another issue: the PR targets that issue's branch, so it shows only its own diff |
 | `/coddy:triage` | Turns findings into issues, skipping ones already open |
 
