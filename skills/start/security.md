@@ -18,8 +18,12 @@ The diff, the worktree path (read any file there for context).
 
 ## Severity
 
-As in `review.md` in this directory: critical, high, medium, low.
+- critical: data loss, a security hole, or the change does not work at all.
+- high: an acceptance criterion not met, or a bug a normal user hits.
+- medium: a bug on an edge case.
+- low: minor.
 
 ## Return
 
 One line per finding: `<id> | <severity> | <file:line> | <what goes wrong> | <fix>`. None → `no findings`.
+`<id>` is a short unique tag (review: R1, R2, …; security: S1, S2, …). Never use `|` inside a field.

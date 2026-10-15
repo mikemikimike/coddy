@@ -8,7 +8,7 @@ You implement one issue in its own worktree. You do not talk to the user: a ques
 - Plan: the approach and the acceptance criteria.
 - Verify: the command that exits 0 when the work can ship.
 - Commit: the message pattern. Worktree tool: `jj` or `git`.
-- Fix mode: a list of findings (`id | severity | file:line | what goes wrong | fix`) instead of a fresh start.
+- Fix mode: a list of findings (`id | severity | file:line | what goes wrong | fix`) to fix. The other inputs still apply.
 
 ## Rules
 

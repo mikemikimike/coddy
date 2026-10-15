@@ -15,7 +15,11 @@ Worktree, the diff against its base, the plan with its acceptance criteria, veri
 
 ## Rules
 
-- The same editing, verify and commit rules as `implement.md` in this directory.
+- Edit only under the worktree: never the main checkout, never another worktree.
+- No tracker or forge calls, no push.
+- Run verify inside the worktree before you finish and fix what it reports.
+- Commit with the pattern. `jj`: `jj commit -m "<message>"` (a jj workspace has no `.git`; never run `git` there). `git`: `git add -A && git commit -m "<message>"`.
+- A question only the user can answer → stop and return it; do not guess.
 - Fix only within the acceptance criteria; anything else goes under Out-of-scope ideas.
 - Each fix comes with a test wherever the project tests that code.
 - No refactors, renames or style changes.
@@ -23,5 +27,7 @@ Worktree, the diff against its base, the plan with its acceptance criteria, veri
 ## Return
 
 - Hardened: one line per item, `<weak point> | <file:line> | <fix>`, or `nothing found`.
+- Files: one per line.
 - Verify: `pass` or `fail`, with the last 20 lines of output on fail.
+- Open questions: or `none`.
 - Out-of-scope ideas: one per line, or `none`.

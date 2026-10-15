@@ -24,3 +24,4 @@ Not style, naming or preference, unless it hides a bug. Every finding points at 
 ## Return
 
 One line per finding: `<id> | <severity> | <file:line> | <what goes wrong> | <fix>`. None → `no findings`.
+`<id>` is a short unique tag (review: R1, R2, …; security: S1, S2, …). Never use `|` inside a field.
