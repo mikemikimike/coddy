@@ -134,7 +134,9 @@ name. So it is the one layer that holds for a cloud agent, or for any
 branch coddy did not name. `/coddy:onboard` offers to copy it to
 `.github/workflows/coddy.yml`, or copy the file yourself. Its ceilings:
 
-- GitHub Issues only. A Jira PR carries no closing reference and fails it.
+- GitHub Issues only. A Jira project gets the local guardrails alone:
+  `/coddy:onboard` does not offer the check, and a copied one fails every
+  Jira PR, which carries no closing reference.
 - GitHub computes the references only on a PR against the default branch.
   On a PR stacked on another branch, the check reads the closing keywords
   in the description itself. A link made only in the sidebar is not seen.
