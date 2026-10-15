@@ -75,7 +75,7 @@ t 0 "sweep is a quiet no-op before onboarding" run sweep
 
 leg() {
   tool=$1 n=$2
-  printf 'tracker: github\nworktree: %s\ndefault_branch: main\n' "$tool" > .claude/coddy.yml
+  printf 'tracker: github\nworktree: %s\ndefault_branch: main\nverify: test -f s.txt\n' "$tool" > .claude/coddy.yml
   wire snap "leg$n"
   t 0 "$tool: create worktree" run create "$n" "feat/$n-thing"
   t 0 "$tool: create is idempotent" run create "$n" "feat/$n-thing"
@@ -188,6 +188,16 @@ leg() {
   t 0 "$tool: push of the stacked branch" run push "$q" "feat($q): stacked"
   t 0 "$tool: the stacked branch reached the remote" git ls-remote --exit-code origin "refs/heads/feat/$q-stack"
   t 0 "$tool: and the base branch did not move" test "$(git ls-remote origin "refs/heads/feat/$n-thing")" = "$was"
+  # verify runs the config's command in the worktree and passes its exit code
+  # through; diff is the worktree's change against its base.
+  t 0 "$tool: verify passes when the command passes" run verify "$q"
+  t 1 "$tool: verify fails when the command fails" run verify "$n"
+  t 1 "$tool: verify refuses an issue with no worktree" run verify 97
+  t 0 "$tool: that refusal says how to make one" says "/coddy:start 97" run verify 97
+  t 0 "$tool: diff shows the issue's changed file" says "a.txt" run diff "$n"
+  t 0 "$tool: the stacked diff shows its own change" says "s.txt" run diff "$q"
+  t 1 "$tool: and not its base's" says "a.txt" run diff "$q"
+  t 1 "$tool: diff refuses an issue with no worktree" run diff 97
   # The end of the lifecycle, on the continued branch: sweep removes the
   # worktree once its last commit is in main on the remote through a merge
   # commit and nothing is uncommitted.

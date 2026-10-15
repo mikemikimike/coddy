@@ -4,6 +4,8 @@
 #   issue.sh claim  <issue> [--take]   lock the issue for this session, move it to In Progress
 #   issue.sh push   <issue> [message]  commit what is uncommitted, then push
 #   issue.sh state  <issue> [key=value | key+=value ...]   print, or set, the issue's phase state for start and ship
+#   issue.sh verify <issue>            run the config's verify command in the issue's worktree, passing its exit code through
+#   issue.sh diff   <issue>            the worktree's diff against its base (default_branch on the remote, or the stacked issue's branch)
 #   issue.sh sweep                     remove what issues with a merged PR left behind
 #   issue.sh guard                     PreToolUse hook on Edit/Write (hooks/hooks.json)
 #   issue.sh snap | trip               Pre/PostToolUse hooks on Bash
@@ -383,6 +385,22 @@ case "$cmd" in
     done
     exit 0 ;;
 
+  verify)
+    [ -d "$wt" ] || die "no worktree for $issue. Run /coddy:start $issue."
+    v=$(cfg verify); [ -n "$v" ] || die "no verify command in .claude/coddy.yml"
+    cd "$wt" && sh -c "$v"; exit $? ;;
+
+  diff)
+    [ -d "$wt" ] || die "no worktree for $issue. Run /coddy:start $issue."
+    from=$(cat ".git/coddy/$issue.base" 2>/dev/null)
+    if [ "$tool" = jj ]; then
+      if [ -n "$from" ]; then from="\"$from\""; else from="$base@origin"; fi
+      jj -R "$wt" diff -r "$from..@"
+    else
+      git -C "$wt" diff "${from:-origin/$base}...HEAD"
+    fi
+    exit $? ;;
+
   state)
     # start's phase state: key=value lines in the lock directory, so sweep
     # removes them with the lock. Anyone may read; only the lock's owner
@@ -411,5 +429,5 @@ case "$cmd" in
         { grep -v "^$k=" "$f" 2>/dev/null; printf '%s=%s\n' "$k" "$v"; } > "$f.tmp" && mv "$f.tmp" "$f" || die "could not write $f"
       fi
     done ;;
-  *) die "usage: issue.sh create <issue> <branch> [base-issue] | claim <issue> [--take] | push <issue> [message] | state <issue> [key=value ...] | sweep | status | guard" ;;
+  *) die "usage: issue.sh create <issue> <branch> [base-issue] | claim <issue> [--take] | push <issue> [message] | state <issue> [key=value ...] | verify <issue> | diff <issue> | sweep | status | guard" ;;
 esac
