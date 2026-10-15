@@ -122,8 +122,8 @@ fi
 # HEAD on the default branch's own history counts as on it: that is where jj
 # leaves a synced checkout. Paths, not git status codes: jj colocation flips
 # untracked files to intent-to-add on its own.
-# ponytail: one git hash-object per dirty file, so a checkout with thousands
-# of dirty files slows every shell command; batch with --stdin-paths then.
+# Every dirty file is hashed by one git hash-object; a path holding a newline
+# is misread by --stdin-paths, as it already is by the line-based fingerprint.
 snap() {
   cd "$root" 2>/dev/null || return 0
   b=$(cfg default_branch); b="${b:-main}"
@@ -135,11 +135,15 @@ snap() {
   elif ! git merge-base --is-ancestor HEAD "refs/remotes/origin/$b" 2>/dev/null; then
     echo "detached HEAD $h"
   fi
-  git status --porcelain -uall -z 2>/dev/null | while IFS= read -r -d '' e; do
+  files=() n=0
+  while IFS= read -r -d '' e; do
     p="${e:3}"
     case "$p" in .claude/*) continue ;; esac
-    if [ -f "$p" ]; then printf '%s %s\n' "$p" "$(git hash-object -- "$p")"; else printf '%s gone\n' "$p"; fi
-  done
+    if [ -f "$p" ]; then files[n]="$p"; n=$((n+1)); else printf '%s gone\n' "$p"; fi
+  done < <(git status --porcelain -uall -z 2>/dev/null)
+  [ "$n" -gt 0 ] || return 0
+  printf '%s\n' "${files[@]}" | git hash-object --stdin-paths 2>/dev/null |
+    { i=0; while IFS= read -r hash; do printf '%s %s\n' "${files[i]}" "$hash"; i=$((i+1)); done; }
 }
 
 if [ "${1-}" = snap ] || [ "${1-}" = trip ]; then
