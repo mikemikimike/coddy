@@ -57,6 +57,7 @@ mkdir .claude
 echo note > notes.txt; : > empty.txt # untracked on purpose: jj must not make these look like changes
 
 t 1 "no skill disables model invocation" grep -rq disable-model-invocation "$here/skills"
+t 1 "no skill names a vendor skill" grep -rqE 'superpowers|code-review:' "$here/skills"
 # The config schema has three copies. yamlkeys reads the yaml block under a
 # "## Config" heading (README comments out its jira lines, so a leading "# "
 # is dropped), naming a nested key parent.child and leaving out a bare
@@ -117,6 +118,26 @@ leg() {
   t 0 "$tool: the lock names the taker" holds "sess-a $$" ".git/coddy/$n/owner"
   t 0 "$tool: guard allows the worktree after the claim" guard "$repo/.worktrees/$n/a.txt"
   t 0 "$tool: guard allows a Claude Code worktree named for the claimed issue" guard "$repo/.claude/worktrees/$n/a.txt"
+  t 0 "$tool: state is empty before any write" test -z "$(run state "$n" 2>&1)"
+  t 0 "$tool: state sets keys" run state "$n" phase=implement round=0
+  t 0 "$tool: state prints them" says "^phase=implement$" run state "$n"
+  run state "$n" phase=review >/dev/null 2>&1
+  t 0 "$tool: a set replaces the key's line" test "$(run state "$n" | grep -c '^phase=')" = 1
+  t 0 "$tool: and keeps the new value" says "^phase=review$" run state "$n"
+  run state "$n" 'upheld+=a b' >/dev/null 2>&1; run state "$n" 'upheld+=c' >/dev/null 2>&1
+  t 0 "$tool: += appends a line per value" test "$(run state "$n" | grep -c '^upheld=')" = 2
+  run state "$n" 'summary=x=y "q" $(touch '"$tmp"'/pwned)' >/dev/null 2>&1
+  t 0 "$tool: a value is stored literally" says '^summary=x=y "q" \$(touch' run state "$n"
+  t 1 "$tool: and never evaluated" test -e "$tmp/pwned"
+  t 1 "$tool: state refuses a key that is not lower case" run state "$n" Phase=x
+  t 1 "$tool: state refuses an argument without =" run state "$n" phase
+  run state "$n" phase=keep >/dev/null 2>&1; t 1 "$tool: a bad key refuses the whole write" run state "$n" phase=gone Bad=x; t 0 "$tool: and writes none of it" says "^phase=keep$" run state "$n"; run state "$n" phase=review >/dev/null 2>&1
+  t 1 "$tool: state refuses another running session's write" as sess-b 1 state "$n" phase=done
+  t 0 "$tool: that refusal names the owner" says "belongs to session sess-a" as sess-b 1 state "$n" phase=done
+  t 0 "$tool: another session may read it" says "^phase=review$" as sess-b 1 state "$n"
+  t 0 "$tool: the owner's process under a new session id (/clear) may write" as sess-b $$ state "$n" round=1
+  run claim "$n" >/dev/null 2>&1 # the lock back to this session id
+  t 1 "$tool: state refuses an issue with no claim" run state 999 phase=x
   echo x > ".worktrees/$n/a.txt"
   t 1 "$tool: push refuses uncommitted work without a message" run push "$n"
   t 1 "$tool: push refuses another session's worktree" as sess-b 1 push "$n" "feat($n): thing"
@@ -188,6 +209,10 @@ leg() {
   t 2 "$tool: guard blocks a lock with no owner" guard "$repo/.worktrees/$p/a.txt"
   t 0 "$tool: that refusal says how to take it" says "take it over" run claim "$p"
   t 0 "$tool: --take adopts a lock with no owner" run claim "$p" --take
+  rm -rf ".git/coddy/$p"; : > ".git/coddy/$p"
+  t 1 "$tool: state refuses a plain-file marker" run state "$p" phase=x
+  t 0 "$tool: and says to re-claim" says "/coddy:start $p" run state "$p" phase=x
+  rm -f ".git/coddy/$p"
   rm -rf ".git/coddy/$p"
   t 0 "$tool: claim" run claim "$p"
   t 0 "$tool: that claim allows edits" guard "$repo/.worktrees/$p/a.txt"
@@ -204,9 +229,11 @@ leg() {
   kept "a merged worktree another running session holds"
   t 0 "$tool: and names that session" says "kept: $p (merged into main, session sess-b still holds it)" run sweep
   echo "sess-b $(sh -c 'echo $$')" > ".git/coddy/$p/owner" # that process has exited
+  mkdir -p ".git/coddy/$p" && echo "phase=done" > ".git/coddy/$p/state"
   t 0 "$tool: sweep reports a merged, clean worktree as cleaned" sh -c "CLAUDE_PROJECT_DIR='$repo' bash '$here/scripts/issue.sh' sweep | grep -qx 'cleaned: $p'"
   t 1 "$tool: sweep removed that worktree" test -e ".worktrees/$p"
   t 1 "$tool: sweep removed its lock and branch record" test -e ".git/coddy/$p" -o -e ".git/coddy/$p.branch"
+  t 1 "$tool: sweep removed its state" test -e ".git/coddy/$p/state"
   t 1 "$tool: sweep removed its local branch" git show-ref -q "refs/heads/ext/pr-$p"
   t 0 "$tool: sweep left the other worktree alone" test -d ".worktrees/$n"
   # The same worktree back, held by this session: swept as before.
