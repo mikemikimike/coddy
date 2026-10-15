@@ -281,15 +281,27 @@ case "$cmd" in
 
   sweep)
     # Runs at skill load (next, start): quiet, never failing, and whatever it
-    # cannot prove finished stays. Finished means the worktree's last commit
-    # reached $base on the remote through a merge commit and nothing is
-    # uncommitted: read from git alone, no tracker. On $base's own
-    # first-parent line that commit is a worktree started from $base with
-    # nothing of its own yet, which stays.
-    # ponytail: a squash or rebase merge leaves no ancestor, so that worktree
-    # stays until removed by hand; feed sweep the PR's state if that bites.
+    # cannot prove finished stays. Finished means the worktree's work reached
+    # $base on the remote and nothing is uncommitted: read from git alone, no
+    # tracker. On $base's own first-parent line the last commit is a worktree
+    # started from $base with nothing of its own yet, which stays.
     git fetch -q origin "$base" >/dev/null 2>&1
     line=$(git rev-list --first-parent "origin/$base" 2>/dev/null)
+    # $tip landed in origin/$base: as an ancestor (a merge commit), as an
+    # upstream copy of every commit since the fork (a rebase merge), or as one
+    # upstream commit holding the fork's whole diff (a squash merge).
+    # ponytail: matched by patch id, so a squash or rebase whose conflicts
+    # were resolved upstream is not seen and stays; read the PR state if that bites.
+    landed() {
+      if git merge-base --is-ancestor "$tip" "origin/$base" 2>/dev/null; then
+        case "$line" in *"$tip"*) return 1 ;; esac; return 0
+      fi
+      fork=$(git merge-base "$tip" "origin/$base" 2>/dev/null) || return 1
+      cherry=$(git cherry "origin/$base" "$tip" "$fork" 2>/dev/null) || return 1
+      [ -n "$cherry" ] && ! grep -q '^+' <<<"$cherry" && return 0
+      id=$(git diff "$fork" "$tip" 2>/dev/null | git patch-id --stable | cut -d' ' -f1)
+      [ -n "$id" ] && git log -p --no-merges "$fork..origin/$base" 2>/dev/null | git patch-id --stable | grep -q "^$id "
+    }
     for rec in .git/coddy/*.branch; do
       issue=$(basename "$rec" .branch); wt=".worktrees/$issue"; branch=$(cat "$rec" 2>/dev/null)
       case "$issue" in ''|*[!A-Za-z0-9_-]*) continue ;; esac
@@ -302,8 +314,7 @@ case "$cmd" in
       else
         tip=$(git -C "$wt" rev-parse HEAD 2>/dev/null); dirty=$(git -C "$wt" status --porcelain 2>/dev/null)
       fi
-      [ -n "$tip" ] && git merge-base --is-ancestor "$tip" "origin/$base" 2>/dev/null || continue
-      case "$line" in *"$tip"*) continue ;; esac
+      [ -n "$tip" ] && landed || continue
       # Another session whose process still runs keeps its worktree, as the
       # guard and push hold to the lock's owner: a gone owner, a lock with no
       # owner or this session's own are swept. The owner line reads as in claim.
