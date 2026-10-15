@@ -18,7 +18,9 @@ allowed-tools: Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/config.sh"), Bash(bash "
 
 ## Keys
 
-- `tracker`: `github` or `jira`. `github` needs `repo: owner/name`; `jira` needs `jira.site` and `jira.project`.
+- `tracker`: `github` or `jira`.
+- `repo`: `owner/name`. Required with `tracker: github`.
+- `jira.site`, `jira.project`: the Atlassian site URL and the project key. Required with `tracker: jira`.
 - `worktree`: `jj` or `git`.
 - `default_branch`: a branch that exists on `origin`.
 - `branch`, `commit`: patterns. `branch` must contain `{issue}`.

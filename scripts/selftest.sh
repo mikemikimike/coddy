@@ -56,6 +56,18 @@ mkdir .claude
 echo note > notes.txt; : > empty.txt # untracked on purpose: jj must not make these look like changes
 
 t 1 "no skill disables model invocation" grep -rq disable-model-invocation "$here/skills"
+# The config schema has three copies. yamlkeys reads the yaml block under a
+# "## Config" heading (README comments out its jira lines, so a leading "# "
+# is dropped), naming a nested key parent.child and leaving out a bare
+# parent; bulletkeys reads the backticked names before the colon of each
+# bullet under "## Keys".
+yamlkeys() { awk '/^## Config/{f=1} f&&/^```yaml/{y=1;next} y&&/^```/{exit} y{sub(/^# ?/,""); if (!match($0,/^ *[a-z_]+:/)) next; k=substr($0,1,RLENGTH-1); rest=substr($0,RLENGTH+1)
+  if (k ~ /^ /) { gsub(/ /,"",k); print top "." k } else { top=k; if (rest !~ /^[ \t]*(#.*)?$/) print k } }' "$1" | sort; }
+bulletkeys() { awk '/^## Keys/{f=1;next} f&&/^## /{exit} f&&/^- `/{ h=substr($0,1,index($0,"`:")); n=split(h,a,"`"); for (i=2;i<=n;i+=2) print a[i] }' "$1" | sort; }
+schema() { [ "$(yamlkeys "$1")" = "$(bulletkeys "$2")" ] && [ "$(yamlkeys "$1")" = "$(yamlkeys "$3")" ]; }
+t 0 "schema: onboard, config and README list the same keys" schema "$here/skills/onboard/SKILL.md" "$here/skills/config/SKILL.md" "$here/README.md"
+awk '{print} /^roadmap: /{print "extra: x"}' "$here/skills/onboard/SKILL.md" > "$tmp/onboard.md"
+t 1 "schema: a key added to one copy only fails it" schema "$tmp/onboard.md" "$here/skills/config/SKILL.md" "$here/README.md"
 t 0 "guard allows everything before onboarding" guard "$repo/README.md"
 t 0 "sweep is a quiet no-op before onboarding" run sweep
 
