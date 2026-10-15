@@ -75,7 +75,7 @@ t 0 "sweep is a quiet no-op before onboarding" run sweep
 
 leg() {
   tool=$1 n=$2
-  printf 'tracker: github\nworktree: %s\ndefault_branch: main\nverify: test -f s.txt\n' "$tool" > .claude/coddy.yml
+  printf 'tracker: github\nworktree: %s\ndefault_branch: main\nverify: test -f s.txt || exit 3\n' "$tool" > .claude/coddy.yml
   wire snap "leg$n"
   t 0 "$tool: create worktree" run create "$n" "feat/$n-thing"
   t 0 "$tool: create is idempotent" run create "$n" "feat/$n-thing"
@@ -191,13 +191,20 @@ leg() {
   # verify runs the config's command in the worktree and passes its exit code
   # through; diff is the worktree's change against its base.
   t 0 "$tool: verify passes when the command passes" run verify "$q"
-  t 1 "$tool: verify fails when the command fails" run verify "$n"
+  t 3 "$tool: verify passes its command's exit code through" run verify "$n"
   t 1 "$tool: verify refuses an issue with no worktree" run verify 97
   t 0 "$tool: that refusal says how to make one" says "/coddy:start 97" run verify 97
   t 0 "$tool: diff shows the issue's changed file" says "a.txt" run diff "$n"
   t 0 "$tool: the stacked diff shows its own change" says "s.txt" run diff "$q"
   t 1 "$tool: and not its base's" says "a.txt" run diff "$q"
   t 1 "$tool: diff refuses an issue with no worktree" run diff 97
+  mv ".git/coddy/$q.base" "$tmp/q.base"; echo feat/gone > ".git/coddy/$q.base"
+  t 0 "$tool: diff falls back to the default branch when the base no longer resolves" run diff "$q"
+  t 0 "$tool: and so does log" run log "$q" README.md
+  mv "$tmp/q.base" ".git/coddy/$q.base"
+  t 0 "$tool: log shows the commits on a path" says init run log "$n" README.md
+  t 0 "$tool: log treats a path starting with - as a path" test -z "$(run log "$n" --stat 2>&1)"
+  t 1 "$tool: log refuses an issue with no worktree" run log 97 a.txt
   # The end of the lifecycle, on the continued branch: sweep removes the
   # worktree once its last commit is in main on the remote through a merge
   # commit and nothing is uncommitted.

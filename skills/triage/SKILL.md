@@ -29,5 +29,5 @@ Findings come from this conversation, or from `$ARGUMENTS` when given (a file pa
    - **Fix**: checklist of concrete steps.
    - **Acceptance**: checklist of observable checks.
    Labels: `bug` or `enhancement` (github); issue type Bug or Task (jira).
-5. Each issue whose `triage` lines were used → `bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" state <issue> triage=`.
+5. Each issue whose `triage` lines were used: lines that were filed or skipped as already covered are removed; any others (dropped at the confirm, or a failed create) stay. One call: `bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" state <issue> triage=` followed by `"triage+=<line>"` for each remaining line.
 6. Print the created links.
