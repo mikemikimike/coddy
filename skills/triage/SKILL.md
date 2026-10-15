@@ -2,7 +2,7 @@
 name: triage
 description: Turn review findings into tracker issues
 when_to_use: Use when the user asks to file, log or create issues or tickets from findings, a review, an audit or a list of problems.
-allowed-tools: Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/config.sh"), mcp__plugin_github_github__search_issues, mcp__plugin_github_github__issue_write, mcp__plugin_atlassian_atlassian__getAccessibleAtlassianResources, mcp__plugin_atlassian_atlassian__atlassianUserInfo, mcp__plugin_atlassian_atlassian__searchJiraIssuesUsingJql, mcp__plugin_atlassian_atlassian__createJiraIssue
+allowed-tools: Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/config.sh"), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" status), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" state *), mcp__plugin_github_github__search_issues, mcp__plugin_github_github__issue_write, mcp__plugin_atlassian_atlassian__getAccessibleAtlassianResources, mcp__plugin_atlassian_atlassian__atlassianUserInfo, mcp__plugin_atlassian_atlassian__searchJiraIssuesUsingJql, mcp__plugin_atlassian_atlassian__createJiraIssue
 ---
 
 # Triage
@@ -10,11 +10,14 @@ allowed-tools: Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/config.sh"), mcp__plugin
 ## Config
 !`bash "${CLAUDE_PLUGIN_ROOT}/scripts/config.sh"`
 
+## Worktrees
+!`bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" status`
+
 `NOT_ONBOARDED` → stop and say: run `/coddy:onboard` first.
 `tracker: jira` → every Atlassian MCP call takes `cloudId`: call `getAccessibleAtlassianResources` once and use the entry whose url is `jira.site`; me is `atlassianUserInfo`'s `accountId`. Those tools not loaded → stop and say the atlassian plugin needs to be authenticated.
 
 ## Source
-Findings come from this conversation, or from `$ARGUMENTS` when given (a file path or pasted text).
+Findings come from this conversation, or from `$ARGUMENTS` when given (a file path or pasted text), and from the `triage` lines of `bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" state <issue>` for each claimed issue of mine in Worktrees (`owners` is `me`; empty `triage` lines are ignored): say which issue they came from.
 
 ## Steps
 
@@ -26,4 +29,5 @@ Findings come from this conversation, or from `$ARGUMENTS` when given (a file pa
    - **Fix**: checklist of concrete steps.
    - **Acceptance**: checklist of observable checks.
    Labels: `bug` or `enhancement` (github); issue type Bug or Task (jira).
-5. Print the created links.
+5. Each issue whose `triage` lines were used → `bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" state <issue> triage=`.
+6. Print the created links.
