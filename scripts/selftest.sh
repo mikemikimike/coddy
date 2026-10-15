@@ -20,6 +20,7 @@ t() {
 run() { CLAUDE_PROJECT_DIR="$repo" bash "$here/scripts/issue.sh" "$@"; }
 as() { CLAUDE_CODE_SESSION_ID=$1 CLAUDE_PID=$2 run "${@:3}"; }
 says() { "${@:2}" 2>&1 | grep -q "$1"; } # the command's output mentions $1
+holds() { read -r a b _ < "$2" && [ "$a $b" = "$1" ]; } # the owner line $2 names session and pid $1
 # guard <path> [session] [pid]: the edit hook, as Claude Code calls it; the
 # payload names this run's session unless another is, and none when "" is;
 # the hook runs in that session's process: this one, or 1 for another session
@@ -80,40 +81,40 @@ leg() {
   t 2 "$tool: guard blocks the worktree before the claim" guard "$repo/.worktrees/$n/a.txt"
   t 1 "$tool: push refused before the claim" run push "$n" "feat($n): thing"
   t 0 "$tool: claim" run claim "$n"
-  t 0 "$tool: the lock names this session and its pid" grep -qx "sess-a $$" ".git/coddy/$n/owner"
+  t 0 "$tool: the lock names this session and its pid" holds "sess-a $$" ".git/coddy/$n/owner"
   t 0 "$tool: guard allows the owner's edit" guard "$repo/.worktrees/$n/a.txt"
   t 2 "$tool: guard blocks another session's edit in that worktree" guard "$repo/.worktrees/$n/a.txt" sess-b
   t 0 "$tool: that rejection names the issue and the owner" says "issue $n belongs to session sess-a (pid $$, running)" guard "$repo/.worktrees/$n/a.txt" sess-b
   t 2 "$tool: a Claude Code worktree is held to the same owner check" guard "$repo/.claude/worktrees/$n/a.txt" sess-b
   t 0 "$tool: a hook payload without session_id is not held to it" guard "$repo/.worktrees/$n/a.txt" ""
   t 0 "$tool: guard allows the owner's process under a new session id (/clear)" guard "$repo/.worktrees/$n/a.txt" sess-b $$
-  t 0 "$tool: and moves the lock to that session id" grep -qx "sess-b $$" ".git/coddy/$n/owner"
+  t 0 "$tool: and moves the lock to that session id" holds "sess-b $$" ".git/coddy/$n/owner"
   t 0 "$tool: and back on this session's edit" guard "$repo/.worktrees/$n/a.txt"
   t 0 "$tool: guard allows the owner's session from a new process (--resume)" guard "$repo/.worktrees/$n/a.txt" sess-a 1
-  t 0 "$tool: and moves the lock to that process" grep -qx "sess-a 1" ".git/coddy/$n/owner"
+  t 0 "$tool: and moves the lock to that process" holds "sess-a 1" ".git/coddy/$n/owner"
   t 0 "$tool: and back on this session's edit" guard "$repo/.worktrees/$n/a.txt"
-  t 0 "$tool: the lock names this session and its pid again" grep -qx "sess-a $$" ".git/coddy/$n/owner"
+  t 0 "$tool: the lock names this session and its pid again" holds "sess-a $$" ".git/coddy/$n/owner"
   t 1 "$tool: a running session's claim is refused" as sess-b 1 claim "$n"
   t 0 "$tool: that refusal names the owner" says "session sess-a" as sess-b 1 claim "$n"
   PATH="$tmp/nops:$PATH" t 1 "$tool: a running session's claim is refused with no ps on PATH" as sess-b 1 claim "$n"
   t 0 "$tool: a re-claim by the owner is a no-op" run claim "$n"
   t 0 "$tool: so is one by the owner's process under a new session id (/clear)" as sess-b $$ claim "$n"
-  t 0 "$tool: and the lock followed it to that session id" grep -qx "sess-b $$" ".git/coddy/$n/owner"
+  t 0 "$tool: and the lock followed it to that session id" holds "sess-b $$" ".git/coddy/$n/owner"
   t 0 "$tool: and back to this one" run claim "$n"
   t 0 "$tool: so is one by the owner's session from a new process (--resume)" as sess-a 1 claim "$n"
-  t 0 "$tool: and the lock followed it to that process" grep -qx "sess-a 1" ".git/coddy/$n/owner"
+  t 0 "$tool: and the lock followed it to that process" holds "sess-a 1" ".git/coddy/$n/owner"
   t 0 "$tool: and back to this one" run claim "$n"
-  t 0 "$tool: the lock names this session and its pid again" grep -qx "sess-a $$" ".git/coddy/$n/owner"
+  t 0 "$tool: the lock names this session and its pid again" holds "sess-a $$" ".git/coddy/$n/owner"
   t 0 "$tool: a --take by the owner is a no-op too" run claim "$n" --take
-  t 0 "$tool: the lock still names this session" grep -qx "sess-a $$" ".git/coddy/$n/owner"
+  t 0 "$tool: the lock still names this session" holds "sess-a $$" ".git/coddy/$n/owner"
   t 0 "$tool: --take hands the claim to another session and says so" says "taken over: $n from session sess-a (--take)" as sess-b 1 claim "$n" --take
-  t 0 "$tool: the lock now names that session" grep -qx "sess-b 1" ".git/coddy/$n/owner"
+  t 0 "$tool: the lock now names that session" holds "sess-b 1" ".git/coddy/$n/owner"
   t 2 "$tool: guard now blocks the previous owner" guard "$repo/.worktrees/$n/a.txt"
   t 0 "$tool: guard allows the taker" guard "$repo/.worktrees/$n/a.txt" sess-b
   dead=$(sh -c 'echo $$') # that shell has exited
   as sess-c "$dead" claim "$n" --take >/dev/null 2>&1
   t 0 "$tool: a lock whose owner is gone is taken over" says "not running" run claim "$n"
-  t 0 "$tool: the lock names the taker" grep -qx "sess-a $$" ".git/coddy/$n/owner"
+  t 0 "$tool: the lock names the taker" holds "sess-a $$" ".git/coddy/$n/owner"
   t 0 "$tool: guard allows the worktree after the claim" guard "$repo/.worktrees/$n/a.txt"
   t 0 "$tool: guard allows a Claude Code worktree named for the claimed issue" guard "$repo/.claude/worktrees/$n/a.txt"
   echo x > ".worktrees/$n/a.txt"
@@ -142,7 +143,7 @@ leg() {
   wait "$x"; xr=$?; wait "$y"; yr=$?
   t 0 "$tool: of two claims at once exactly one wins" test "$xr$yr" = 01 -o "$xr$yr" = 10
   [ "$xr" = 0 ] && w="sess-x $$" || w="sess-y $live"
-  t 0 "$tool: the lock names the winner" grep -qx "$w" ".git/coddy/$p/owner"
+  t 0 "$tool: the lock names the winner" holds "$w" ".git/coddy/$p/owner"
   kill "$live" 2>/dev/null; wait "$live" 2>/dev/null
   echo "more $p" > ".worktrees/$p/more.txt" # per leg: the other leg's is in main by now
   was=$(git ls-remote origin "refs/heads/ext/pr-$p")
@@ -176,7 +177,7 @@ leg() {
   rm -rf ".git/coddy/$p"; : > ".git/coddy/$p"
   t 0 "$tool: an old marker still allows edits from any session" guard "$repo/.worktrees/$p/a.txt" sess-b
   t 0 "$tool: claim turns an old marker into a lock" run claim "$p"
-  t 0 "$tool: that lock names this session" grep -qx "sess-a $$" ".git/coddy/$p/owner"
+  t 0 "$tool: that lock names this session" holds "sess-a $$" ".git/coddy/$p/owner"
   : > ".git/coddy/$p/owner" # a kill between the owner file's open and its write, or a full disk
   t 1 "$tool: an empty owner line is a claim that died halfway" run claim "$p"
   t 0 "$tool: that refusal says so" says "died halfway" run claim "$p"
@@ -363,6 +364,15 @@ echo "sess-e $$" > .git/coddy/other/owner
 PATH="$tmp/nops:$PATH" t 0 "issue.sh status owners: a running process is running with no ps on PATH" owns "other=sess-e (running)" sess-a 1
 echo "sess-f " > .git/coddy/other/owner
 t 0 "issue.sh status owners: another session without a pid is running, as claim reads it" owns "other=sess-f (running)"
+# A pid is the owner's only while it is the process that started then.
+started=$(ps -o lstart= -p $$ | awk '{$1=$1; gsub(/ /,"_")} 1')
+echo "sess-e $$ $started" > .git/coddy/other/owner
+t 0 "issue.sh status owners: a running pid with the recorded start time is running" owns "other=sess-e (running)" sess-z 1
+echo "sess-e $$ Thu_Jan_1_00:00:00_1970" > .git/coddy/other/owner
+t 0 "issue.sh status owners: a running pid with another start time is gone" owns "other=sess-e (gone)"
+t 1 "issue.sh status owners: and it is not me by that pid" owns "other=me" sess-z
+PATH="$tmp/nops:$PATH" t 0 "issue.sh status owners: a start time ps cannot read counts as a match" owns "other=sess-e (running)" sess-z 1
+t 0 "claim records the claiming process's start time" grep -qx "sess-a $$ $started" .git/coddy/43/owner
 rm -r .git/coddy/other; : > .git/coddy/other
 t 0 "issue.sh status owners: a marker from before locks is unknown" owns "other=unknown"
 rm .git/coddy/other
