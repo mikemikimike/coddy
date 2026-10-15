@@ -197,3 +197,5 @@ bash scripts/selftest.sh                 # the scripts end to end, in a throwawa
 claude plugin validate .                 # manifest and skill frontmatter
 claude --plugin-dir . -p "/coddy:next"   # run one skill headless against the working copy
 ```
+
+A headless run needs `--allowedTools` only for what a skill's `allowed-tools` does not mirror: the edit tools and `Agent`, plus `Skill(coddy:<name>)` for a plain-language trigger in `-p`.
