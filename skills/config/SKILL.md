@@ -3,7 +3,7 @@ name: config
 description: Show or change the project's coddy settings in .claude/coddy.yml
 when_to_use: Use when the user asks to view, edit, change or update coddy settings for an onboarded project, such as the tracker, worktree tool, default branch, branch or commit pattern, verify command, roadmap or edit guard mode.
 argument-hint: "[key=value ...]"
-allowed-tools: Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/config.sh"), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/tree.sh")
+allowed-tools: Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/config.sh"), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" status)
 ---
 
 # Config
@@ -12,7 +12,7 @@ allowed-tools: Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/config.sh"), Bash(bash "
 !`bash "${CLAUDE_PLUGIN_ROOT}/scripts/config.sh"`
 
 ## Worktrees
-!`bash "${CLAUDE_PLUGIN_ROOT}/scripts/tree.sh"`
+!`bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" status`
 
 `NOT_ONBOARDED` → stop and say: run `/coddy:onboard` first.
 

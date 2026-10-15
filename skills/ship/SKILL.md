@@ -2,7 +2,7 @@
 name: ship
 description: Verify, commit, push and open a PR for an issue's worktree
 when_to_use: Use only when the user asks to ship, open a PR, push for review or submit the current issue. Never invoke it unprompted because the work looks finished.
-allowed-tools: Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/config.sh"), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/tree.sh"), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" push *), mcp__plugin_github_github__list_pull_requests, mcp__plugin_github_github__create_pull_request, mcp__plugin_github_github__add_issue_comment, mcp__plugin_github_github__issue_read, mcp__plugin_github_github__issue_write
+allowed-tools: Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/config.sh"), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" status), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" push *), mcp__plugin_github_github__list_pull_requests, mcp__plugin_github_github__create_pull_request, mcp__plugin_github_github__add_issue_comment, mcp__plugin_github_github__issue_read, mcp__plugin_github_github__issue_write
 ---
 
 # Ship
@@ -11,7 +11,7 @@ allowed-tools: Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/config.sh"), Bash(bash "
 !`bash "${CLAUDE_PLUGIN_ROOT}/scripts/config.sh"`
 
 ## Worktrees
-!`bash "${CLAUDE_PLUGIN_ROOT}/scripts/tree.sh"`
+!`bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" status`
 
 `NOT_ONBOARDED` → stop and say: run `/coddy:onboard` first.
 Worktrees lists each as `issue=branch`, `bases` the branch a stacked worktree was started from, and `owners` whose claim each is. Pick the issue: `$ARGUMENTS` when given, else the issue started in this conversation, else the only worktree whose `owners` entry is `me` or `unknown`. Several and unclear → ask which. None listed → stop and say: nothing to ship, run `/coddy:start <issue>` first. The pick's `owners` entry names another session → stop and say whose it is: ship it from that session, or `/coddy:start <issue>` to take it over (`push` refuses it anyway).
