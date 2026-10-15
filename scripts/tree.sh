@@ -12,8 +12,7 @@
 # issue.sh's alive() reads it (kill -0, /proc, then ps; no pid counts as
 # running), or unknown for a marker from before locks or an owner line that
 # names no session.
-root="${CLAUDE_PROJECT_DIR:-$PWD}"
-case "$root" in */.worktrees/*) root="${root%%/.worktrees/*}" ;; esac
+. "${0%/*}/root.sh"
 cd "$root" || exit 0
 echo "root: $root"
 echo "jj_repo: $([ -d .jj ] && echo yes || echo no)"

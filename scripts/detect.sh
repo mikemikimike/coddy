@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Facts about the current project that /coddy:onboard uses to pre-fill the
 # config so it only asks about what it cannot infer.
-cd "${CLAUDE_PROJECT_DIR:-$PWD}" || exit 0
+. "${0%/*}/root.sh"
+cd "$root" || exit 0
 echo "config: $([ -f .claude/coddy.yml ] && echo present || echo none)"
 echo "remote: $(git remote get-url origin 2>/dev/null || echo none)"
 echo "jj: $(command -v jj >/dev/null 2>&1 && echo installed || echo missing)"
