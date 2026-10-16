@@ -165,14 +165,31 @@ git replace -d "$tip" >/dev/null; rm -f "$tmp/idx"
 tripped 2 "config: so does one pushed to a branch the changed config names as default" 'sed -i.bak "s/^default_branch:.*/default_branch: x/" .coddy.yml && rm .coddy.yml.bak && git commit -qam x && git push -q origin HEAD:refs/heads/x'
 t 0 "config: and is restored" same .coddy.yml
 git reset -q --hard origin/main
+# ls-remote matches its pattern against the tail of every ref, so a decoy
+# a/refs/heads/main is listed too, first: the exact ref is taken. The decoy
+# stays on origin, so every later ask of origin runs with it there.
+tripped 2 "config: so does one pushed to a decoy branch ls-remote lists before the default" 'echo "guard: warn" >> .coddy.yml && git commit -qam warn && git push -q origin HEAD:refs/heads/a/refs/heads/main'
+t 0 "config: and is restored" same .coddy.yml
+git reset -q --hard origin/main
 # A url.<forged>.insteadOf in the global git config would send ls-remote to
 # a remote of the command's own in origin's name, so origin is asked with
-# system and global git config ignored.
+# system and global git config ignored, their credential.* keys alone passed
+# back as -c, in order and whole, and safe.directory set to the root. A spy
+# git records what the ls-remote was given.
 git init -q --bare "$tmp/forged.git"
-printf '[url "%s"]\n\tinsteadOf = %s\n' "$tmp/forged.git" "$tmp/origin.git" > "$tmp/gitconfig"
-GIT_CONFIG_GLOBAL="$tmp/gitconfig" report "config: a change pushed to a remote a global insteadOf passes off as origin trips" 'echo "guard: warn" >> .coddy.yml && git commit -qam warn && git push -q "$tmp/forged.git" HEAD:main'
+printf '[url "%s"]\n\tinsteadOf = %s\n[credential]\n\thelper = \n\thelper = "!f() { echo username=x; echo password=y; }; f"\n[credential "https://example.com"]\n\tuseHttpPath\n' "$tmp/forged.git" "$tmp/origin.git" > "$tmp/gitconfig"
+mkdir "$tmp/spy"; cat > "$tmp/spy/git" <<EOF
+#!/bin/sh
+case " \$* " in *" ls-remote "*) printf '%s\n' "\$@" > "$tmp/spy.log" ;; esac
+exec "$(command -v git)" "\$@"
+EOF
+chmod +x "$tmp/spy/git"
+PATH="$tmp/spy:$PATH" GIT_CONFIG_GLOBAL="$tmp/gitconfig" report "config: a change pushed to a remote a global insteadOf passes off as origin trips" 'echo "guard: warn" >> .coddy.yml && git commit -qam warn && git push -q "$tmp/forged.git" HEAD:main'
 t 0 "config: and that report names the file" grep -q 'changed .coddy.yml' <<<"$out"
 t 0 "config: and is restored" same .coddy.yml
+t 0 "config: ls-remote got the global credential keys as -c, in order and whole" sh -c "tr '\n' ' ' < '$tmp/spy.log' | grep -qF -- '-c credential.helper= -c credential.helper=!f() { echo username=x; echo password=y; }; f -c credential.https://example.com.usehttppath '"
+t 1 "config: and nothing else from that config" grep -qi insteadof "$tmp/spy.log"
+t 0 "config: with safe.directory set to the root" grep -qFx -- "safe.directory=$repo" "$tmp/spy.log"
 git reset -q --hard origin/main
 # refs/remotes/origin/main is the command's to write, so trip asks origin
 # itself, once, when the config changed, and moves no ref: a committed warn

@@ -291,8 +291,13 @@ if [ "${1-}" = snap ] || [ "${1-}" = trip ]; then
   # config) and stands: origin is asked once (ls-remote), only when a config
   # path changed, with system and global git config ignored, since a
   # url.insteadOf there would answer in origin's name (so a remote that
-  # needs a global credential helper cannot confirm, and the pull is put
-  # back), and no local ref is trusted or moved, since a shell command
+  # needs a global insteadOf cannot confirm, and the pull is put back);
+  # their credential.* keys alone are passed back as -c, in order and
+  # whole, since a helper supplies a password and cannot move the URL, and
+  # safe.directory is set to the root, which that config may have held too.
+  # The exact ref is taken, since ls-remote matches its pattern against the
+  # tail of every ref and a pushed a/refs/heads/<b> would be listed first.
+  # No local ref is trusted or moved, since a shell command
   # can write any of them, and replace objects are ignored, since a command
   # can plant one that maps the tip's tree to the changed file; a commit made
   # here, a checkout of an older one, a change origin cannot be asked about,
@@ -313,7 +318,11 @@ if [ "${1-}" = snap ] || [ "${1-}" = trip ]; then
     # content, or absent before and after.
     [ "$(readlink "$p" 2>/dev/null)" = "$(cat "$s.link" 2>/dev/null)" ] && { { [ -f "$p" ] && [ -f "$s" ] && cmp -s "$p" "$s"; } || { [ ! -e "$p" ] && [ ! -f "$s" ]; }; } && continue
     if [ -f "$p" ] && [ ! -L "$p" ]; then
-      [ -n "$up" ] || { r=$(GIT_TERMINAL_PROMPT=0 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null git -C "$root" ls-remote --exit-code origin "refs/heads/$b" 2>/dev/null) && up="${r%%[[:space:]]*}" || up=none; }
+      if [ -z "$up" ]; then
+        gc=(-c "safe.directory=$root")
+        while IFS= read -r -d '' kv; do gc+=(-c "${kv/$'\n'/=}"); done < <(for s in --system --global; do git -C "$root" config -z "$s" --get-regexp '^credential\.' 2>/dev/null; done)
+        up=$(GIT_TERMINAL_PROMPT=0 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null git -C "$root" "${gc[@]}" ls-remote origin "refs/heads/$b" 2>/dev/null | awk -v r="refs/heads/$b" '$2 == r { print $1; exit }'); up="${up:-none}"
+      fi
       want=$(GIT_NO_REPLACE_OBJECTS=1 git -C "$root" rev-parse -q --verify "$up:$c" 2>/dev/null)
       [ -n "$want" ] && [ "$want" = "$(git hash-object "$p" 2>/dev/null)" ] && continue
     fi
