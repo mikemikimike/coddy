@@ -140,6 +140,14 @@ CODDY_AGENT_DIR=.claude tripped 0 "config: changing the legacy file next to a li
 t 0 "config: and the change stands" grep -q '^verify: true$' .claude/coddy.yml
 CODDY_AGENT_DIR=.claude tripped 0 "config: deleting the legacy file next to a live .coddy.yml is quiet" 'rm .claude/coddy.yml'
 t 1 "config: and it is not restored" test -e .claude/coddy.yml
+# Empty on both sides is no match: a file git cannot hash in the config's
+# place, while origin's tip has no such path or origin cannot be asked.
+report "config: an unreadable file in its place trips, the tip without the path" 'echo "guard: warn" > .coddy.yml && chmod 000 .coddy.yml'
+t 0 "config: and is restored" same .coddy.yml
+t 1 "config: with no git error in the report" grep -q fatal <<<"$out"
+report "config: an unreadable file in its place trips, origin unreachable" 'echo "guard: warn" > .coddy.yml && chmod 000 .coddy.yml && git remote set-url origin "$tmp/gone.git"'
+git remote set-url origin "$tmp/origin.git"
+t 0 "config: and is restored" same .coddy.yml
 git add -f .coddy.yml && git commit -q -m conf && git push -q origin main
 echo 'roadmap: X.md' >> .coddy.yml
 tripped 0 "config: a checkout of the committed .coddy.yml stands" 'git checkout -- .coddy.yml'
@@ -147,6 +155,13 @@ t 0 "config: and left it at HEAD" same .coddy.yml
 tripped 2 "config: a change committed here in the same command trips" 'echo "guard: warn" >> .coddy.yml && git commit -qam warn'
 t 0 "config: and is restored" same .coddy.yml
 git reset -q --hard origin/main
+# A replace object can map the tip's tree to the changed config, so the tip
+# is read with replace objects ignored.
+tip=$(git rev-parse HEAD)
+report "config: a replace object passing the changed config off as the tip's trips" 'echo "guard: warn" >> .coddy.yml && b=$(git hash-object -w .coddy.yml) && export GIT_INDEX_FILE="$tmp/idx" && git read-tree HEAD && git update-index --cacheinfo "100644,$b,.coddy.yml" && git replace HEAD "$(git commit-tree "$(git write-tree)" -p HEAD~1 -m x)"'
+t 0 "config: and that report names the file" grep -q 'changed .coddy.yml' <<<"$out"
+t 0 "config: and is restored" same .coddy.yml
+git replace -d "$tip" >/dev/null; rm -f "$tmp/idx"
 tripped 2 "config: so does one pushed to a branch the changed config names as default" 'sed -i.bak "s/^default_branch:.*/default_branch: x/" .coddy.yml && rm .coddy.yml.bak && git commit -qam x && git push -q origin HEAD:refs/heads/x'
 t 0 "config: and is restored" same .coddy.yml
 git reset -q --hard origin/main

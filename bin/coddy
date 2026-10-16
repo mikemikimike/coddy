@@ -290,8 +290,11 @@ if [ "${1-}" = snap ] || [ "${1-}" = trip ]; then
   # origin has at the default branch came from git (a pull of a shared
   # config) and stands: origin is asked once (ls-remote), only when a config
   # path changed, and no local ref is trusted or moved, since a shell command
-  # can write any of them; a commit made here, a checkout of an older one,
-  # or a change origin cannot be asked about is put back. The default branch
+  # can write any of them, and replace objects are ignored, since a command
+  # can plant one that maps the tip's tree to the changed file; a commit made
+  # here, a checkout of an older one, a change origin cannot be asked about,
+  # a path the tip does not hold, or a file git cannot hash is put back
+  # (empty on both sides is no match). The default branch
   # is read from the snapshot's copy of the config, not from what the
   # command left. A link that was not there, or points elsewhere, or a
   # directory in the file's place is a change whatever it holds: a link
@@ -308,7 +311,8 @@ if [ "${1-}" = snap ] || [ "${1-}" = trip ]; then
     [ "$(readlink "$p" 2>/dev/null)" = "$(cat "$s.link" 2>/dev/null)" ] && { { [ -f "$p" ] && [ -f "$s" ] && cmp -s "$p" "$s"; } || { [ ! -e "$p" ] && [ ! -f "$s" ]; }; } && continue
     if [ -f "$p" ] && [ ! -L "$p" ]; then
       [ -n "$up" ] || { r=$(GIT_TERMINAL_PROMPT=0 git -C "$root" ls-remote --exit-code origin "refs/heads/$b" 2>/dev/null) && up="${r%%[[:space:]]*}" || up=none; }
-      [ "$(git -C "$root" rev-parse -q --verify "$up:$c" 2>/dev/null)" = "$(git hash-object "$p")" ] && continue
+      want=$(GIT_NO_REPLACE_OBJECTS=1 git -C "$root" rev-parse -q --verify "$up:$c" 2>/dev/null)
+      [ -n "$want" ] && [ "$want" = "$(git hash-object "$p" 2>/dev/null)" ] && continue
     fi
     rm -rf "$p"
     # A copy that cannot be written back is kept, and the report says so,

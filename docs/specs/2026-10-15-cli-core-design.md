@@ -62,7 +62,7 @@ The agent-dir rules in `guard` and `snap`, today written as `.claude/`:
   - `snap` records both paths, including whether each exists.
   - `trip` restores either one that a shell command deleted or changed.
   - `trip` deletes a `.coddy.yml` that the command created while only `.claude/coddy.yml` existed, so a new file cannot shadow the live config.
-  - A config identical to its copy at `HEAD` is left alone, per path.
+  - A changed config stands only when identical to what `origin` holds at `default_branch` as `git ls-remote` reports it, per path: that commit must be local and is read with replace objects ignored (`GIT_NO_REPLACE_OBJECTS=1`); no local ref is trusted or moved; a path the tip does not hold, or a file git cannot hash, is no match; a deletion is always restored.
 - `/coddy:config` gains a migrate step when only the legacy file exists: write `.coddy.yml` with the Edit tool (the guard asks), then delete `.claude/coddy.yml`. A change to any other key offers the move first.
 - `/coddy:onboard` writes `.coddy.yml`.
 - `detect` reports `.coddy.yml` and the legacy file.
