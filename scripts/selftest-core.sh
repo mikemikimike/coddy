@@ -152,6 +152,14 @@ t 0 "guard asks on .coddy.yml through a symlink in the owner's worktree" asks "$
 t 0 "guard asks on .coddy.yml through a hard link in the owner's worktree" asks "$repo/.worktrees/1/hard"
 rm .worktrees/1/cfg .worktrees/1/hard
 t 2 "guard blocks another session's edit" guard "$repo/.worktrees/1/a.txt" sess-b
+# The Claude Code shims take their inputs from CLAUDE_* alone: an inherited
+# CODDY_* value, however hostile, is ignored.
+shim() { CLAUDE_PROJECT_DIR=$repo CODDY_ROOT=/ CODDY_AGENT_DIR=src CODDY_SESSION=sess-a CODDY_PID=$$ bash "$here/scripts/issue.sh" "$@"; }
+shimguard() { printf '{"session_id":"sess-a","tool_input":{"file_path":"%s"}}' "$1" | shim guard; }
+t 0 "shim: the root is CLAUDE_PROJECT_DIR, not an inherited CODDY_ROOT" says "^root: $repo\$" shim status
+t 0 "shim: the session and pid are CLAUDE_*'s, so the owner's inherited ones do not make the claim mine" says '^owners: 1=sess-a (running)' shim status
+t 2 "shim: the agent dir is .claude, not an inherited CODDY_AGENT_DIR" shimguard "$repo/src/x.c"
+t 0 "shim: and .claude/ is free" shimguard "$repo/.claude/n.md"
 CODDY_AGENT_DIR=.codex t 0 "agent dir: its worktree of a claimed issue is editable" guard "$repo/.codex/worktrees/1/a.txt"
 echo x > .worktrees/1/a.txt
 t 1 "push refuses another session" as sess-b 1 push 1 "feat(1): thing"

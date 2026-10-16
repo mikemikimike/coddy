@@ -16,7 +16,7 @@ Move coddy's mechanics into a `coddy` command with no Claude Code dependency, so
 
 - `bin/coddy`: the core. Today's `scripts/issue.sh` body plus `scripts/root.sh`, and the verbs `config` (today's `config.sh`) and `detect` (today's `detect.sh`). Executable. Claude Code puts a plugin's `bin/` on the Bash tool's `PATH`; other agents need a symlink or a `PATH` entry.
 - `scripts/root.sh`: deleted.
-- `scripts/issue.sh`, `scripts/config.sh`, `scripts/detect.sh`: Claude shims. Each sets, without overriding a value already present,
+- `scripts/issue.sh`, `scripts/config.sh`, `scripts/detect.sh`: Claude shims. Each sets, from Claude's environment alone, ignoring any inherited `CODDY_*` value (a settings `env`, a hostile shell),
   - `CODDY_ROOT` from `CLAUDE_PROJECT_DIR`
   - `CODDY_SESSION` from `CLAUDE_CODE_SESSION_ID`
   - `CODDY_PID` from `CLAUDE_PID`
