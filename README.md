@@ -175,6 +175,25 @@ review_rounds: 3             # optional; 1-5 (default 3)
 - Delete the file yourself to leave the workflow. Every other skill refuses
   to run without it.
 
+## Related projects
+
+coddy is the guard that holds while a person or an agent works on one issue.
+It is not a board, a planner or a factory, and it pairs with tools that are:
+
+- [super-board](https://github.com/EricTechPro/super-board) drains a GitHub
+  Projects board unattended: cards run through build, QA and review lanes and
+  merge when green. coddy keeps a person in the merge and holds an interactive
+  session to its claimed worktree, which a factory's lanes do not police; the
+  two can run on the same repository, a lane calling `/coddy:start` and
+  `/coddy:ship` under the hood.
+- [Vibe Kanban](https://www.vibekanban.com/) and
+  [CCPM](https://github.com/automazeio/ccpm) launch and coordinate several
+  agents at once. coddy does not launch anything; it makes whatever runs in
+  parallel unable to step on another issue's worktree.
+- Cross-agent guardrail tools such as [chock](https://github.com/open-coder-ai/chock)
+  block dangerous commands and files across agents. coddy's rules are about
+  the workflow (claim, worktree, PR), not about which commands are dangerous.
+
 ## Contributing
 
 - Pick an open [issue](https://github.com/mnsami/coddy/issues) and work it

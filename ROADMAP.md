@@ -77,3 +77,4 @@ Enforcement every agent gets.
 - **Maintenance.** Four agents' hook APIs are still changing. M4 starts with a spike on building on an existing cross-agent hook layer instead of maintaining four adapters here.
 - **Adoption is untested.** That's what M1's test window is for; M2 onwards waits for its result.
 - **Platform absorption.** GitHub already enforces the remote half for its own cloud agent. coddy's value rests on the local, cross-vendor layer and on tracker semantics (exclusive claims, Jira, lifecycle cleanup).
+- **Orchestrators can grow a guard.** Autonomous board executors such as [super-board](https://github.com/EricTechPro/super-board) already have worktree-per-card, atomic assignee claims, merged-worktree cleanup and a Codex host, and could add interactive-session enforcement from above. The defence is the same: tracker breadth (Jira), the human-in-the-merge promise, and being the guard a factory runs on top of rather than a rival to it.
