@@ -22,7 +22,7 @@ Move coddy's mechanics into a `coddy` command with no Claude Code dependency, so
   - `CODDY_PID` from `CLAUDE_PID`
   - `CODDY_AGENT_DIR=.claude`
 
-  then `exec`s `bin/coddy` (`issue.sh` passes its arguments through; `config.sh` and `detect.sh` call the `config` and `detect` verbs).
+  then sources `bin/coddy` (`issue.sh` passes its arguments through; `config.sh` and `detect.sh` call the `config` and `detect` verbs).
 
 The core reads no `CLAUDE_*` variable. The only `.claude` string left in it is the legacy config path.
 

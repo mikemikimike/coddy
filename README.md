@@ -130,9 +130,10 @@ to undo any change it left there.
 command from Claude that removes or rewrites it is undone, and so is one
 that creates it next to a config still at `.claude/coddy.yml`, which it
 would shadow; `/coddy:config` asks you first, by whatever path the edit
-reaches the file, a symlink from a worktree included. A change that arrives
-through git, such as a pull of a shared config, stands; one committed locally
-does not.
+reaches the file, a symlink from a worktree included. A change that is what
+`origin` holds on the default branch, such as a pull of a shared config,
+stands; one committed locally, checked out from an older commit, or made
+while `origin` cannot be asked does not.
 
 **Branch protection.** The backstop for a command that edits, commits and
 pushes to the default branch in one go. Nothing in coddy can set it.
@@ -189,7 +190,7 @@ review_rounds: 3             # optional; 1-5 (default 3)
 - `.claude/coddy.yml`, where earlier versions kept the config, is still read
   while `.coddy.yml` is absent; `/coddy:config` offers to move it.
 - Delete the file yourself to leave the workflow (`.git/coddy`, where claims
-  and the tripwire keep their records, can go with it). Every other skill
+  keep their records, can go with it). Every other skill
   refuses to run without the file.
 
 ## Contributing

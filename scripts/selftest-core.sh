@@ -150,55 +150,27 @@ git reset -q --hard origin/main
 tripped 2 "config: so does one pushed to a branch the changed config names as default" 'sed -i.bak "s/^default_branch:.*/default_branch: x/" .coddy.yml && rm .coddy.yml.bak && git commit -qam x && git push -q origin HEAD:refs/heads/x'
 t 0 "config: and is restored" same .coddy.yml
 git reset -q --hard origin/main
-# refs/remotes/origin/main is the command's to write, so trip reads it as
-# snap recorded it unless origin confirms where a fetch moved it: a commit on
-# main hidden behind it, or a config change passed off as pulled through it,
-# trips, and the ref is put back.
-real() { git ls-remote origin refs/heads/main | cut -f1; }
-trusted() { cut -d' ' -f2 .git/coddy/up; } # the commit trip last trusted at origin/main
-report "config: a change passed off as pulled by writing refs/remotes/origin/main trips" 'echo "guard: warn" >> .coddy.yml && git commit -qam warn && git update-ref refs/remotes/origin/main HEAD'
+# refs/remotes/origin/main is the command's to write, so trip asks origin
+# itself, once, when the config changed, and moves no ref: a committed warn
+# config passed off as pulled through that ref is put back, the ref left as
+# the command wrote it; a pull of a shared config stands; a checkout of an
+# older commit, or a pull origin cannot be asked about afterwards, is put back.
+tripped 2 "config: a change passed off as pulled by writing refs/remotes/origin/main trips" 'echo "guard: warn" >> .coddy.yml && git commit -qam warn && git update-ref refs/remotes/origin/main HEAD'
 t 0 "config: and is restored" same .coddy.yml
-t 0 "config: and the ref is back where origin has it" test "$(git rev-parse refs/remotes/origin/main)" = "$(real)"
-t 0 "config: and the report says so" grep -q 'refs/remotes/origin/main' <<<"$out"
-t 0 "config: and .git/coddy/up records the commit origin holds" test "$(trusted)" = "$(real)"
-git reset -q --hard origin/main
-report "a commit on main hidden behind a written refs/remotes/origin/main trips" 'git commit -q --allow-empty -m x && git update-ref refs/remotes/origin/main HEAD'
-t 0 "and that report names the commit" grep -q 'commits on main' <<<"$out"
-t 0 "and the ref is back where origin has it" test "$(git rev-parse refs/remotes/origin/main)" = "$(real)"
-git reset -q --hard origin/main
-# A put-back the ref refuses (a stale lock) is reported as such, and the
-# commit trip trusts outlives the snapshot in .git/coddy/up, so the next snap
-# reads it there rather than off the ref the command left forged.
-report "config: a forged ref the put-back cannot move still trips" 'echo "guard: warn" >> .coddy.yml && git commit -qam warn && git update-ref refs/remotes/origin/main HEAD && touch .git/refs/remotes/origin/main.lock'
-t 0 "config: and is restored" same .coddy.yml
-t 0 "config: and the report says the ref could not be put back" grep -q 'could not be put back' <<<"$out"
-t 0 "config: and .git/coddy/up keeps the commit origin holds" test "$(trusted)" = "$(real)"
-rm .git/refs/remotes/origin/main.lock
-tripped 2 "config: so a checkout of the committed warn config trips, the ref still forged" 'git checkout -- .coddy.yml'
-t 0 "config: and is restored" same .coddy.yml
-t 0 "config: and the ref is put back now" test "$(git rev-parse refs/remotes/origin/main)" = "$(real)"
-git reset -q --hard origin/main
-# A symref in the ref's place is replaced, not written through to its target.
-unref() { [ -z "$(git symbolic-ref -q refs/remotes/origin/main)" ] && [ "$(git rev-parse refs/remotes/origin/main)" = "$(real)" ] && [ "$(git rev-parse refs/heads/main)" != "$(real)" ]; }
-report "a symref written at refs/remotes/origin/main trips" 'git commit -q --allow-empty -m x && git symbolic-ref refs/remotes/origin/main refs/heads/main'
-t 0 "and the put-back replaced the symref, leaving refs/heads/main as the command left it" unref
-git reset -q --hard origin/main
+t 0 "config: and the ref is left as the command wrote it" test "$(git rev-parse refs/remotes/origin/main)" = "$(git rev-parse HEAD)"
+git fetch -q origin && git reset -q --hard origin/main
 git clone -q -b main "$tmp/origin.git" "$tmp/mate" 2>/dev/null
 upstream() { (cd "$tmp/mate" && echo "$1" >> .coddy.yml && git commit -q -am up && git push -q origin HEAD:main); }
 upstream 'roadmap: Y.md'
-tripped 0 "config: a pulled change stands, origin confirming where the fetch moved the ref" 'git fetch -q origin && git merge -q --ff-only origin/main'
+tripped 0 "config: a pulled change stands" 'git fetch -q origin && git merge -q --ff-only origin/main'
 t 0 "config: and is kept" grep -q '^roadmap: Y.md$' .coddy.yml
-t 0 "config: and .git/coddy/up moved with it" test "$(trusted)" = "$(real)"
-upstream 'roadmap: Y2.md'
-git fetch -q origin # outside any command: snap still reads .git/coddy/up, and the next trip asks origin
-tripped 0 "a fetch outside the hooks is confirmed by origin at the next trip" 'true'
-t 0 "and .git/coddy/up moved with it" test "$(trusted)" = "$(real)"
-git merge -q --ff-only origin/main
+tripped 2 "config: a checkout of an older commit with another config trips" 'git checkout -q HEAD~1'
+t 0 "config: and is restored" grep -q '^roadmap: Y.md$' .coddy.yml
+git checkout -q -f main
 upstream 'roadmap: Z.md'
-tripped 2 "config: a pulled change origin cannot confirm afterwards is put back" 'git fetch -q origin && git merge -q --ff-only origin/main && git remote set-url origin "$tmp/gone.git"'
+tripped 2 "config: a pulled change origin cannot be asked about afterwards is put back" 'git fetch -q origin && git merge -q --ff-only origin/main && git remote set-url origin "$tmp/gone.git"'
 t 1 "config: so .coddy.yml is as it was" grep -q '^roadmap: Z.md$' .coddy.yml
-t 0 "config: and so is the ref" test "$(git rev-parse refs/remotes/origin/main)" = "$(git rev-parse HEAD~1)"
-t 0 "config: and so is .git/coddy/up" test "$(trusted)" = "$(git rev-parse HEAD~1)"
+t 0 "config: and the ref is where the fetch left it" test "$(git rev-parse refs/remotes/origin/main)" = "$(git rev-parse HEAD)"
 git remote set-url origin "$tmp/origin.git"; git checkout -q -- .coddy.yml
 # The snapshot is what trip checks a command against, so a command that
 # removes it, or its copy of the config, is rejected; a project that left the
@@ -211,6 +183,9 @@ tripped 2 "snapshot: so does one that removes its copy of the config" 'rm -f "$s
 mv .coddy.yml "$tmp/aside"
 tripped 0 "snapshot: quiet once the config is gone, .git/coddy kept" 'true'
 mv "$tmp/aside" .coddy.yml
+t 0 "snapshot: a tool_use_id that is not a plain word names the shared snapshot" sh -c "printf '{\"tool_use_id\":\"../x\"}' | '$here/bin/coddy' snap && test -f '${snapfile%-w}-shared'"
+rm -f "${snapfile%-w}-shared"*
+t 2 "guard: .worktrees/up/ is held to a claim like any other" guard "$repo/.worktrees/up/a.txt"
 
 # No agent-dir rules without CODDY_AGENT_DIR; with it, its directory is free
 # and its worktrees/ held to the lock.
