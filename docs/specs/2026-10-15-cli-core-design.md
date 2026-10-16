@@ -62,8 +62,8 @@ The agent-dir rules in `guard` and `snap`, today written as `.claude/`:
   - `snap` records both paths, including whether each exists.
   - `trip` restores either one that a shell command deleted or changed.
   - `trip` deletes a `.coddy.yml` that the command created while only `.claude/coddy.yml` existed, so a new file cannot shadow the live config.
-  - A changed config is put back first, the command's file hashed where it is, and that commit's copy written back from the object store only when the hash matches what `origin` holds at `default_branch` as `git ls-remote` reports it, per path, so a `trip` cut short while asking leaves the restored config in place, and nothing under `TMPDIR` is opened by a name a command could plant: `origin` is asked with system and global git config ignored (`GIT_CONFIG_NOSYSTEM=1`, `GIT_CONFIG_GLOBAL` set to a `mktemp` file of `trip`'s own, since a `url.insteadOf` there would answer in `origin`'s name), that file holding the system and global `credential.*` keys alone, in order and whole, as `git config --show-scope` lists them from every file git reads (a helper supplies a password and cannot move the URL; a file rather than `-c`, so `.git/config` outranks them as for git and a subsection holding `=` is carried), with `credential.interactive=false` and `safe.directory` set to the root; the exact `refs/heads/<default_branch>` line is taken, since `ls-remote` matches its pattern against the tail of every ref, and only a commit id it names is looked up (no answer names no ref); that commit must be local and is read with replace objects ignored (`GIT_NO_REPLACE_OBJECTS=1`); no local ref is trusted or moved; a path the tip does not hold, or a file git cannot hash, is no match; a deletion is always restored.
-- `/coddy:config` gains a migrate step when only the legacy file exists: write `.coddy.yml` with the Edit tool (the guard asks), then delete `.claude/coddy.yml`. A change to any other key offers the move first.
+  - A changed config is put back from the snapshot, always, a pull or checkout that brought another one included: nothing a shell command run as the same user can write (a ref, an object, a git config) tells it from a forged one. The message names `/coddy:config`, which accepts it from `HEAD`. Nothing under `TMPDIR` is opened unless it is a plain file. The fingerprint leaves both config paths to the lock, since a restored file differs from a pulled `HEAD`.
+- `/coddy:config` gains a migrate step when only the legacy file exists: write `.coddy.yml` with the Edit tool (the guard asks), then delete `.claude/coddy.yml`. A change to any other key offers the move first. It also accepts a config change that came from git: it shows `git diff HEAD -- <config>` and, on yes, writes `HEAD`'s content with the Write tool (the guard asks).
 - `/coddy:onboard` writes `.coddy.yml`.
 - `detect` reports `.coddy.yml` and the legacy file.
 - The three schema copies keep the same keys.
@@ -76,7 +76,7 @@ The agent-dir rules in `guard` and `snap`, today written as `.claude/`:
   - a claim and push held to the owner through `CODDY_SESSION` and `CODDY_PID`;
   - `.coddy.yml` preferred over the legacy file, and the fallback;
   - the guard's ask on `.coddy.yml`, in both guard modes;
-  - the shadowing restore, plus the delete and change restores on `.coddy.yml`;
+  - the shadowing restore, plus the delete and change restores on `.coddy.yml`, a pull of a shared config among them;
   - no agent-dir rules without `CODDY_AGENT_DIR`;
   - `start` and `ship` (including `ship` stopping on a failing verify) next to their aliases.
 - `selftest.sh` does not call `selftest-core.sh`, so it stays literally unchanged. This repo's `verify` becomes `bash scripts/selftest.sh && bash scripts/selftest-core.sh && claude plugin validate .` through `/coddy:config`, and the Commands section of `CLAUDE.md` lists both tests.

@@ -132,14 +132,11 @@ to undo any change it left there.
 command from Claude that removes or rewrites it is undone, and so is one
 that creates it next to a config still at `.claude/coddy.yml`, which it
 would shadow; `/coddy:config` asks you first, by whatever path the edit
-reaches the file, a symlink from a worktree included. A changed config is
-put back first and re-applied only once `origin` confirms it is what the
-default branch holds, such as a pull of a shared config; one committed
-locally, checked out from an older commit, or made while `origin` cannot be
-asked stays undone. `origin` is asked with your system and global git config
-ignored but for their credential settings, which are carried along, so a
-remote that only works through an `insteadOf` set there cannot confirm a
-pulled config, and that pull stays undone.
+reaches the file, a symlink from a worktree included. A change that came
+through git, a pull of a shared config or a checkout, is undone too, since
+nothing on disk tells it from one a command forged: the message sends Claude
+to `/coddy:config`, which shows you the diff against `HEAD` and writes it
+only when you say so.
 
 **Branch protection.** The backstop for a command that edits, commits and
 pushes to the default branch in one go. Nothing in coddy can set it.

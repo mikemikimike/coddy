@@ -242,6 +242,9 @@ snap() {
     set -- "${e:3}"
     case "$e" in [RC]*) IFS= read -r -d '' o; set -- "$1" "$o" ;; esac
     for p; do
+      # The config paths are the lock's: a restored one differs from a pulled
+      # HEAD, and that is not the command's change to undo.
+      case "$p" in .coddy.yml|"$legacy") continue ;; esac
       [ -z "${CODDY_AGENT_DIR-}" ] || case "$p" in "$CODDY_AGENT_DIR"/*) continue ;; esac
       if [ -f "$p" ]; then files[n]="$p"; n=$((n+1)); else printf '%s gone\n' "$p"; fi
     done
@@ -274,7 +277,7 @@ if [ "${1-}" = snap ] || [ "${1-}" = trip ]; then
     done
     exit 0
   fi
-  code=2 msg="" keep="" up="" asked=""
+  code=2 msg="" keep=""
   # The snapshot says whether the project was onboarded when the command
   # started, so trip never looks at the config first: the command may have
   # removed it, or made it. No snapshot, or one without its copy of the
@@ -286,46 +289,29 @@ if [ "${1-}" = snap ] || [ "${1-}" = trip ]; then
     die "that command left no snapshot of the main checkout at $file, so what it changed cannot be checked: a command may not touch the snapshot. Undo what it did."
   [ -f "$pre" ] || { rm -f "$file" "$file".*; exit 0; }
   # The config is the off switch for every hook here, so a shell command may
-  # not change it: each path that changed is put back as it was, first, and
-  # only then is origin asked about the command's plain file, by its hash; a
-  # trip cut short while asking (a slow credential helper, the hook's
-  # timeout) so leaves the restored config in place. A plain file holding
-  # what origin has at the default branch came from git (a pull of a shared
-  # config) and that copy, read from the object store, goes back in the
-  # restored one's place, unreported (TMPDIR is the command's to write too,
-  # so nothing there is opened by a name it could guess): origin is
-  # asked once (ls-remote), only when a config path changed, with system and
-  # global git config ignored, since a url.insteadOf there would answer in
-  # origin's name (so a remote that needs a global insteadOf cannot confirm,
-  # and the pull stays put back); their credential.* keys alone are carried,
-  # in order and whole, in a config file of their own standing in for the
-  # global one, so .git/config outranks them as it does for git (a helper
-  # supplies a password and cannot move the URL; a subsection holding = is
-  # more than -c could carry), helpers are told not to prompt, and
-  # safe.directory is set to the root, which that config may have held too.
-  # The exact ref is taken, since ls-remote matches its pattern against the
-  # tail of every ref and a pushed a/refs/heads/<b> would be listed first,
-  # and only a commit id it names is looked up: no local ref is trusted or
-  # moved, since a shell command can write any of them (a branch named none
-  # included), and replace objects are ignored, since a command can plant one
-  # that maps the tip's tree to the changed file; a commit made here, a
-  # checkout of an older one, a change origin cannot be asked about, a path
-  # the tip does not hold, or a file git cannot hash stays put back (empty on
-  # both sides is no match). The default branch is read from the snapshot's
-  # copy of the config, not from what the command left. A link that was not
-  # there, or points elsewhere, or a directory in the file's place is a
-  # change whatever it holds: a link reaches a file the lock does not watch;
-  # a link the user keeps there, as it was, is not. What is put back is a
-  # plain file. The legacy file is let go once .coddy.yml is live (settled
-  # first, above): it is ignored then and cannot change the effective config.
+  # not change it: each path that changed is put back as it was, whatever
+  # the command did. A pull or checkout that brought another config is put
+  # back too, since nothing a shell command run as the same user can write
+  # (a ref, an object, a git config) tells it from a forged one; the report
+  # names /coddy:config, which accepts it from HEAD with the user's say-so.
+  # A link that was not there, or points elsewhere, or a directory in the
+  # file's place is a change whatever it holds: a link reaches a file the
+  # lock does not watch; a link the user keeps there, as it was, is not.
+  # What is put back is a plain file. TMPDIR is the command's to write too,
+  # so nothing there is opened unless it is a plain file: a FIFO planted at
+  # a snapshot name would hang trip. The legacy file is let go once
+  # .coddy.yml is live (settled first, above): it is ignored then and cannot
+  # change the effective config. The default branch is read from the
+  # snapshot's copy of the config, as snap read it, not from what the
+  # command left.
   b=$(cfg default_branch "$pre" 2>/dev/null); b="${b:-main}"
   for c in .coddy.yml "$legacy"; do
     p="$root/$c" s="$file.${c//\//_}"
     { [ "$c" = "$legacy" ] && [ -f "$root/.coddy.yml" ]; } && continue
     # Unchanged: the same link target (none for a plain file) and the same
     # content, or absent before and after.
-    [ "$(readlink "$p" 2>/dev/null)" = "$(cat "$s.link" 2>/dev/null)" ] && { { [ -f "$p" ] && [ -f "$s" ] && cmp -s "$p" "$s"; } || { [ ! -e "$p" ] && [ ! -f "$s" ]; }; } && continue
-    new=""; [ ! -f "$p" ] || [ -L "$p" ] || new=$(git hash-object --no-filters "$p" 2>/dev/null)
+    was=""; [ ! -f "$s.link" ] || was=$(cat "$s.link")
+    [ "$(readlink "$p" 2>/dev/null)" = "$was" ] && { { [ -f "$p" ] && [ -f "$s" ] && cmp -s "$p" "$s"; } || { [ ! -e "$p" ] && [ ! -f "$s" ]; }; } && continue
     rm -rf "$p"
     # A copy that cannot be written back is kept, and the report says so,
     # rather than claiming the file is back.
@@ -333,34 +319,9 @@ if [ "${1-}" = snap ] || [ "${1-}" = trip ]; then
     elif mkdir -p "${p%/*}" && cp "$s" "$p"; then what=restored
     else what="removed, and could not be put back: restore it by hand from the copy at $s"; keep=1
     fi
-    want=""
-    if [ -n "$new" ]; then
-      # The credential file is mktemp's (its own name, the owner's alone to
-      # read), so a command cannot plant a FIFO or a link where it goes;
-      # without one origin is not asked, and the restore stands.
-      if [ -z "$asked" ] && { asked=1; cred=$(mktemp "$file.cred.XXXXXX" 2>/dev/null); }; then
-        while IFS= read -r -d '' scope && IFS= read -r -d '' kv; do
-          case "$scope" in system|global) ;; *) continue ;; esac
-          k="${kv%%$'\n'*}" v="${kv#*$'\n'}"; [ "$kv" != "$k" ] || v=true
-          git config -f "$cred" --add "$k" "$v" 2>/dev/null
-        done < <(git -C "$root" -c "safe.directory=$root" config -z --show-scope --get-regexp '^credential\.' 2>/dev/null)
-        up=$(GIT_TERMINAL_PROMPT=0 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL="$cred" git -C "$root" -c "safe.directory=$root" -c credential.interactive=false ls-remote origin "refs/heads/$b" 2>/dev/null | awk -v r="refs/heads/$b" '$2 == r { print $1; exit }')
-        rm -f "$cred"
-      fi
-      case "$up" in ''|*[!0-9a-f]*) ;; *) want=$(GIT_NO_REPLACE_OBJECTS=1 git -C "$root" rev-parse -q --verify "$up:$c" 2>/dev/null) ;; esac
-    fi
-    # A confirmed pull comes back from the object store, not from the file
-    # the command left or a copy of it: written next to the config under a
-    # name of mktemp's, with the mode a fresh file gets, and moved over the
-    # restored one, so no link in its place is followed, and a write that
-    # fails leaves the restored one standing.
-    if [ -n "$want" ] && [ "$want" = "$new" ]; then
-      t=$(mktemp "$p.XXXXXX" 2>/dev/null) && chmod =rw "$t" 2>/dev/null && GIT_NO_REPLACE_OBJECTS=1 git -C "$root" cat-file blob "$want" > "$t" 2>/dev/null && mv -f "$t" "$p" 2>/dev/null && continue
-      [ -z "$t" ] || rm -f "$t"
-    fi
     msg="${msg}that command changed $c, which switches the coddy guardrails, so it has been $what. "
   done
-  [ -z "$msg" ] || msg="${msg}Settings change through /coddy:config; leaving the workflow is for the user to do by hand. "
+  [ -z "$msg" ] || msg="${msg}If that came from git (a pull or checkout), accept it with /coddy:config; other settings change there too, and leaving the workflow is for the user to do by hand. "
   confpath
   # Only lines that are new count, so undoing a change never trips the wire.
   added=$(snap | LC_ALL=C sort | LC_ALL=C comm -13 "$file" - | sed 's/ [^ ]*$//' | tr '\n' ' ' | sed 's/ $//')
