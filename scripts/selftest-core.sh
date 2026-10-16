@@ -68,10 +68,12 @@ t 0 "detect: .coddy.yml is ignored once excluded" says '^config_ignored: yes$' r
 # Editing .coddy.yml is for the user to allow, in both guard modes; without
 # jq the guard cannot tell which path is edited and fails closed.
 t 0 "guard asks on .coddy.yml" asks "$repo/.coddy.yml"
+for p in "$repo/./.coddy.yml" "$repo//.coddy.yml" "$repo/sub/../.coddy.yml" "$repo/.CODDY.YML" .coddy.yml; do t 0 "guard asks on .coddy.yml spelled $p" asks "$p"; done
 t 2 "guard blocks the main checkout" guard "$repo/README.md"
 PATH="$tmp/nojq" t 2 "guard without jq fails closed" guard "$repo/.coddy.yml"
 echo 'guard: warn' >> .coddy.yml
 t 0 "warn: guard still asks on .coddy.yml" asks "$repo/.coddy.yml"
+t 0 "warn: and spelled through .." asks "$repo/sub/../.coddy.yml"
 t 0 "warn: guard lets the main checkout through" guard "$repo/README.md"
 PATH="$tmp/nojq" t 2 "warn: guard without jq fails closed" guard "$repo/.coddy.yml"
 sed -i.bak '/^guard:/d' .coddy.yml && rm .coddy.yml.bak
@@ -86,10 +88,18 @@ t 0 "config: restored after the deletion" same .coddy.yml
 tripped 2 "config: rewriting .coddy.yml trips" 'echo "verify: true" >> .coddy.yml'
 t 0 "config: restored after the rewrite" same .coddy.yml
 t 0 "config: that report names the file" says 'changed .coddy.yml' sh -c "cd '$repo' && printf '{\"tool_use_id\":\"w\"}' | '$here/bin/coddy' snap && echo x >> .coddy.yml && printf '{\"tool_use_id\":\"w\"}' | '$here/bin/coddy' trip"
+tripped 2 "config: a link in its place trips, the same content behind it" 'cp .coddy.yml "$tmp/else" && ln -sf "$tmp/else" .coddy.yml'
+t 1 "config: and the link is gone" test -L .coddy.yml
+t 0 "config: a file with its content back" same .coddy.yml
+tripped 2 "config: a directory in its place trips" 'rm .coddy.yml && mkdir .coddy.yml'
+t 0 "config: and the file is back" same .coddy.yml
 mv .coddy.yml .claude/coddy.yml
 tripped 2 "config: a .coddy.yml created next to the live legacy file trips" 'cp .claude/coddy.yml .coddy.yml'
 t 1 "config: and is removed" test -e .coddy.yml
 t 0 "config: the legacy file stands" same .claude/coddy.yml
+ln -s ../.coddy.yml .claude/cfg
+CODDY_AGENT_DIR=.claude t 0 "guard asks on a dangling link to .coddy.yml from the agent dir while the legacy file is live" asks "$repo/.claude/cfg"
+rm .claude/cfg
 tripped 2 "config: deleting the legacy file trips" 'rm .claude/coddy.yml'
 t 0 "config: the legacy file is restored" same .claude/coddy.yml
 # Once .coddy.yml is live the legacy file is ignored, so the lock lets it go.
@@ -103,6 +113,12 @@ git add -f .coddy.yml && git commit -q -m conf && git push -q origin main
 echo 'roadmap: X.md' >> .coddy.yml
 tripped 0 "config: a checkout of the committed .coddy.yml stands" 'git checkout -- .coddy.yml'
 t 0 "config: and left it at HEAD" same .coddy.yml
+tripped 2 "config: a change committed here in the same command trips" 'echo "guard: warn" >> .coddy.yml && git commit -qam warn'
+t 0 "config: and is restored" same .coddy.yml
+git reset -q --hard origin/main
+tripped 2 "config: so does one pushed to a branch the changed config names as default" 'sed -i.bak "s/^default_branch:.*/default_branch: x/" .coddy.yml && rm .coddy.yml.bak && git commit -qam x && git push -q origin HEAD:refs/heads/x'
+t 0 "config: and is restored" same .coddy.yml
+git reset -q --hard origin/main
 
 # No agent-dir rules without CODDY_AGENT_DIR; with it, its directory is free
 # and its worktrees/ held to the lock.
@@ -131,6 +147,10 @@ t 0 "the owner's process re-claims under another session id" as sess-b $$ claim 
 t 0 "and the lock followed it" holds "sess-b $$" .git/coddy/1/owner
 run claim 1 >/dev/null 2>&1
 t 0 "guard allows the owner's edit" guard "$repo/.worktrees/1/a.txt"
+ln -s ../../.coddy.yml .worktrees/1/cfg; ln .coddy.yml .worktrees/1/hard
+t 0 "guard asks on .coddy.yml through a symlink in the owner's worktree" asks "$repo/.worktrees/1/cfg"
+t 0 "guard asks on .coddy.yml through a hard link in the owner's worktree" asks "$repo/.worktrees/1/hard"
+rm .worktrees/1/cfg .worktrees/1/hard
 t 2 "guard blocks another session's edit" guard "$repo/.worktrees/1/a.txt" sess-b
 CODDY_AGENT_DIR=.codex t 0 "agent dir: its worktree of a claimed issue is editable" guard "$repo/.codex/worktrees/1/a.txt"
 echo x > .worktrees/1/a.txt

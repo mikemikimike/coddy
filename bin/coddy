@@ -102,7 +102,7 @@ alive() {
   now=$(started "$1"); [ -z "${2-}" ] || [ -z "$now" ] || [ "$now" = "$2" ]
 }
 die() { echo "coddy: $*" >&2; exit "$code"; }
-cfg() { sed -n "s/^$1:[[:space:]]*//p" "$conf" | sed "s/[[:space:]]*#.*$//; s/^[\"']//; s/[\"']$//" | head -1; }
+cfg() { sed -n "s/^$1:[[:space:]]*//p" "${2:-$conf}" | sed "s/[[:space:]]*#.*$//; s/^[\"']//; s/[\"']$//" | head -1; } # key $1, from the config or file $2
 # The lock's owner ($sid, $pid, $start) is this session ($me): the same
 # session id, or the same agent process, since Claude Code's /clear changes
 # the id and not the pid; a pid reused since the owner's start is not that process.
@@ -164,17 +164,28 @@ if [ "${1-}" = guard ]; then
   in=$(cat)
   me=$(jq -r '.session_id // ""' <<<"$in")
   f=$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$in")
-  # ponytail: string-prefix match, so a symlinked path into the project slips
-  # through; resolve with realpath if that ever matters.
+  # A relative path is written against the hook's cwd, as the tool resolves it.
+  cwd=$(jq -r '.cwd // empty' <<<"$in"); case "$f" in ''|/*) ;; *) f="${cwd:-$PWD}/$f" ;; esac
+  # The physical path a write to $1 lands on: symlinks followed in every
+  # component (a dangling one creates its target), ./, // and .. collapsed.
+  # Fails when its directory does not exist, and no such path is the root.
+  phys() { local p=$1 t i=0; while [ -L "$p" ] && [ "$i" -lt 8 ]; do t=$(readlink "$p"); case "$t" in /*) p=$t ;; *) p="${p%/*}/$t" ;; esac; i=$((i+1)); done; t="${p%/*}"; t=$(cd "${t:-/}" 2>/dev/null && pwd -P) && printf '%s/%s' "$t" "${p##*/}"; }
+  # The off switch for every hook here, and no sensitive-file prompt of the
+  # agent's own: the user allows each edit of it, in both modes, by whatever
+  # path the write reaches it: its own spelling or one with ./, // or ..; a
+  # symlink or hard link from a worktree or the agent dir (-ef: the same
+  # file); any case of its name, as a case-folding disk reads it.
+  at=$(phys "$f") || at=$f
+  if [ "$f" -ef "$root/.coddy.yml" ] || { [ "${at%/*}" = "$(cd "$root" && pwd -P)" ] && [ "$(printf %s "${at##*/}" | tr '[:upper:]' '[:lower:]')" = .coddy.yml ]; }; then
+    jq -cn --arg m "Editing .coddy.yml changes the coddy guardrails. Allow it only if you asked for this change (/coddy:config)." '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "ask", permissionDecisionReason: $m}}'
+    exit 0
+  fi
+  # ponytail: string-prefix match from here on, so a symlinked path into the
+  # project slips through; match on phys if that ever matters.
   case "$f" in */../*) die "refusing a path containing '..': $f" ;; esac
   agent="${CODDY_AGENT_DIR-}" issue=""
   case "$f" in
     "$root"/.worktrees/*) issue="${f#"$root"/.worktrees/}" ;;
-    "$root"/.coddy.yml)
-      # The off switch for every hook here, and no sensitive-file prompt of
-      # the agent's own: the user allows each edit of it, in both modes.
-      jq -cn --arg m "Editing .coddy.yml changes the coddy guardrails. Allow it only if you asked for this change (/coddy:config)." '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "ask", permissionDecisionReason: $m}}'
-      exit 0 ;;
     "$root"/*)
       # The agent's own directory is free, except its worktrees/<name>/,
       # held to <name>'s lock as .worktrees/<name>/ is, or an unclaimed edit
@@ -256,17 +267,25 @@ if [ "${1-}" = snap ] || [ "${1-}" = trip ]; then
   code=2 msg=""
   # The config is the off switch for every hook here, so a shell command may
   # not change it: put each path back as it was. A copy identical to the one
-  # committed at HEAD came from git (a pull, a checkout) and stands. The
-  # legacy file is let go once .coddy.yml is live (settled first, above): it
-  # is ignored then and cannot change the effective config.
+  # committed at HEAD, with HEAD on the remote's default branch, came from
+  # git (a pull, a checkout) and stands; a commit made here is not, so the
+  # change it holds is put back too. The default branch is read from the
+  # snapshot's copy of the config, not from what the command left. A link or
+  # a directory in the file's place is a change whatever it holds: a link
+  # reaches a file the lock does not watch. The legacy file is let go once
+  # .coddy.yml is live (settled first, above): it is ignored then and cannot
+  # change the effective config.
+  for c in .coddy.yml "$legacy"; do pre="$file.${c//\//_}"; [ ! -f "$pre" ] || break; done
+  b=$(cfg default_branch "$pre" 2>/dev/null); b="${b:-main}"
   for c in .coddy.yml "$legacy"; do
     p="$root/$c" s="$file.${c//\//_}"
     { [ "$c" = "$legacy" ] && [ -f "$root/.coddy.yml" ]; } && continue
-    { [ -f "$p" ] && [ -f "$s" ] && cmp -s "$p" "$s"; } && continue
-    [ -f "$p" ] || [ -f "$s" ] || continue
+    { [ -f "$p" ] && [ ! -L "$p" ] && [ -f "$s" ] && cmp -s "$p" "$s"; } && continue
+    [ -e "$p" ] || [ -L "$p" ] || [ -f "$s" ] || continue
     head=$(git -C "$root" rev-parse -q --verify "HEAD:$c" 2>/dev/null)
-    { [ -f "$p" ] && [ -n "$head" ] && [ "$(git hash-object "$p")" = "$head" ]; } && continue
-    if [ -f "$s" ]; then mkdir -p "${p%/*}" && cp "$s" "$p"; what=restored; else rm -f "$p"; what=removed; fi
+    { [ -f "$p" ] && [ ! -L "$p" ] && [ -n "$head" ] && [ "$(git hash-object "$p")" = "$head" ] && git -C "$root" merge-base --is-ancestor HEAD "refs/remotes/origin/$b" 2>/dev/null; } && continue
+    rm -rf "$p"
+    if [ -f "$s" ]; then mkdir -p "${p%/*}" && cp "$s" "$p"; what=restored; else what=removed; fi
     msg="${msg}that command changed $c, which switches the coddy guardrails, so it has been $what. "
   done
   [ -z "$msg" ] || msg="${msg}Settings change through /coddy:config; leaving the workflow is for the user to do by hand. "

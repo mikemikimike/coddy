@@ -129,8 +129,10 @@ to undo any change it left there.
 **Config lock.** `.coddy.yml` is the off switch for all of this. A shell
 command from Claude that removes or rewrites it is undone, and so is one
 that creates it next to a config still at `.claude/coddy.yml`, which it
-would shadow; `/coddy:config` asks you first. A change that arrives through
-git, such as a pull of a shared config, stands.
+would shadow; `/coddy:config` asks you first, by whatever path the edit
+reaches the file, a symlink from a worktree included. A change that arrives
+through git, such as a pull of a shared config, stands; one committed locally
+does not.
 
 **Branch protection.** The backstop for a command that edits, commits and
 pushes to the default branch in one go. Nothing in coddy can set it.
