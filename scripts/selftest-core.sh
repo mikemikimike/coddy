@@ -188,7 +188,7 @@ git init -q --bare "$tmp/forged.git"
 printf '[url "%s"]\n\tinsteadOf = %s\n[credential]\n\thelper = \n\thelper = "!f() { echo username=x; echo password=y; }; f"\n[credential "=x"]\n\thelper = y\n[credential "a=b"]\n\thelper = h1\n[credential "https://example.com"]\n\tuseHttpPath\n' "$tmp/forged.git" "$tmp/origin.git" > "$tmp/gitconfig"
 mkdir "$tmp/spy"; cat > "$tmp/spy/git" <<EOF
 #!/bin/sh
-case " \$* " in *" ls-remote "*) printf '%s\n' "\$@" > "$tmp/spy.log"; cat "\${GIT_CONFIG_GLOBAL:-/dev/null}" > "$tmp/spy.cfg" ;; esac
+case " \$* " in *" ls-remote "*) printf '%s\n' "\$@" > "$tmp/spy.log"; cat "\${GIT_CONFIG_GLOBAL:-/dev/null}" > "$tmp/spy.cfg"; ls -ld "\${GIT_CONFIG_GLOBAL:-/dev/null}" > "$tmp/spy.mode" ;; esac
 exec "$(command -v git)" "\$@"
 EOF
 chmod +x "$tmp/spy/git"
@@ -199,6 +199,8 @@ t 0 "config: ls-remote got the global credential keys in its global config file,
 t 1 "config: and nothing else from that config" sh -c "cat '$tmp/spy.log' '$tmp/spy.cfg' | grep -qi insteadof"
 t 0 "config: with safe.directory set to the root" grep -qFx -- "safe.directory=$repo" "$tmp/spy.log"
 t 0 "config: and helpers told not to prompt" grep -qFx -- "credential.interactive=false" "$tmp/spy.log"
+t 0 "config: that file is the owner's alone to read" grep -q '^-rw-------' "$tmp/spy.mode"
+t 1 "config: and gone afterwards" sh -c "ls '$snapfile'.cred* 2>/dev/null | grep -q ."
 git reset -q --hard origin/main
 # git reads ~/.gitconfig and $XDG_CONFIG_HOME/git/config both; so does trip.
 mkdir -p "$tmp/home" "$tmp/xdg/git"; printf '[credential]\n\thelper = home\n' > "$tmp/home/.gitconfig"; printf '[credential]\n\thelper = xdg\n' > "$tmp/xdg/git/config"
@@ -245,6 +247,32 @@ tripped 2 "config: a pulled change origin cannot be asked about afterwards is pu
 t 1 "config: so .coddy.yml is as it was" grep -q '^roadmap: Z.md$' .coddy.yml
 t 0 "config: and the ref is where the fetch left it" test "$(git rev-parse refs/remotes/origin/main)" = "$(git rev-parse HEAD)"
 git remote set-url origin "$tmp/origin.git"; git checkout -q -- .coddy.yml
+# TMPDIR is the command's to write too, so trip opens nothing there by a
+# name a command could plant: the command's file is hashed in place, a
+# confirmed pull comes back from the object store, and the credential file
+# is made by mktemp. A FIFO at a predictable name would hang trip, and a
+# link there would be followed: the snapshot copy overwritten through it,
+# so the restore installs the command's file, or the link's target truncated.
+# bounded <expected exit> <name>: trip in the background, failed and killed after 5s
+bounded() { wire trip w >/dev/null 2>&1 & tp=$!; i=0; while kill -0 $tp 2>/dev/null && [ $i -lt 50 ]; do sleep 0.1; i=$((i+1)); done
+  if kill -0 $tp 2>/dev/null; then kill $tp 2>/dev/null; pkill -f "$snapfile" 2>/dev/null; wait $tp 2>/dev/null; r=124; else wait $tp; r=$?; fi; t 0 "$2" test "$r" = "$1"; }
+plant() { wire snap w; echo "guard: warn" >> .coddy.yml; "$@"; }
+cp .coddy.yml "$tmp/conf.orig"
+plant mkfifo "$snapfile..coddy.yml.new"; bounded 2 "config: a FIFO planted at the old copy's name does not hang trip"
+t 0 "config: and the change is restored" same .coddy.yml
+plant ln -s "$snapfile..coddy.yml" "$snapfile..coddy.yml.new"; bounded 2 "config: a link planted there trips"
+t 0 "config: and the change is restored, not installed through the link" same .coddy.yml
+plant mkfifo "$snapfile.cred"; bounded 2 "config: a FIFO planted at the credential file's name does not hang trip"
+t 0 "config: and the change is restored" same .coddy.yml
+t 1 "config: and the snapshot is cleaned up" test -e "$snapfile"
+echo precious > "$tmp/T"; plant ln -s "$tmp/T" "$snapfile.cred"; bounded 2 "config: a link planted there trips"
+t 0 "config: and its target is left alone" grep -qx precious "$tmp/T"
+t 0 "config: and the change is restored" same .coddy.yml
+upstream 'roadmap: W.md'
+wire snap w; mkfifo "$snapfile..coddy.yml.new" "$snapfile.cred"; git fetch -q origin && git merge -q --ff-only origin/main
+bounded 0 "config: a pulled change stands with both planted"
+t 0 "config: and is kept" grep -q '^roadmap: W.md$' .coddy.yml
+t 1 "config: as a plain file" test -L .coddy.yml
 # The snapshot is what trip checks a command against, so a command that
 # removes it, or its copy of the config, is rejected; a project that left the
 # workflow by hand, its config gone and .git/coddy kept, is quiet.
