@@ -289,7 +289,10 @@ if [ "${1-}" = snap ] || [ "${1-}" = trip ]; then
   # not change it: put each path back as it was. A plain file holding what
   # origin has at the default branch came from git (a pull of a shared
   # config) and stands: origin is asked once (ls-remote), only when a config
-  # path changed, and no local ref is trusted or moved, since a shell command
+  # path changed, with system and global git config ignored, since a
+  # url.insteadOf there would answer in origin's name (so a remote that
+  # needs a global credential helper cannot confirm, and the pull is put
+  # back), and no local ref is trusted or moved, since a shell command
   # can write any of them, and replace objects are ignored, since a command
   # can plant one that maps the tip's tree to the changed file; a commit made
   # here, a checkout of an older one, a change origin cannot be asked about,
@@ -310,7 +313,7 @@ if [ "${1-}" = snap ] || [ "${1-}" = trip ]; then
     # content, or absent before and after.
     [ "$(readlink "$p" 2>/dev/null)" = "$(cat "$s.link" 2>/dev/null)" ] && { { [ -f "$p" ] && [ -f "$s" ] && cmp -s "$p" "$s"; } || { [ ! -e "$p" ] && [ ! -f "$s" ]; }; } && continue
     if [ -f "$p" ] && [ ! -L "$p" ]; then
-      [ -n "$up" ] || { r=$(GIT_TERMINAL_PROMPT=0 git -C "$root" ls-remote --exit-code origin "refs/heads/$b" 2>/dev/null) && up="${r%%[[:space:]]*}" || up=none; }
+      [ -n "$up" ] || { r=$(GIT_TERMINAL_PROMPT=0 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null git -C "$root" ls-remote --exit-code origin "refs/heads/$b" 2>/dev/null) && up="${r%%[[:space:]]*}" || up=none; }
       want=$(GIT_NO_REPLACE_OBJECTS=1 git -C "$root" rev-parse -q --verify "$up:$c" 2>/dev/null)
       [ -n "$want" ] && [ "$want" = "$(git hash-object "$p" 2>/dev/null)" ] && continue
     fi

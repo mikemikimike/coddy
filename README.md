@@ -133,7 +133,10 @@ would shadow; `/coddy:config` asks you first, by whatever path the edit
 reaches the file, a symlink from a worktree included. A change that is what
 `origin` holds on the default branch, such as a pull of a shared config,
 stands; one committed locally, checked out from an older commit, or made
-while `origin` cannot be asked does not.
+while `origin` cannot be asked does not. `origin` is asked with your system
+and global git config ignored, so a remote that only works through a
+credential helper or `insteadOf` set there cannot confirm a pulled config,
+and that pull is undone.
 
 **Branch protection.** The backstop for a command that edits, commits and
 pushes to the default branch in one go. Nothing in coddy can set it.
