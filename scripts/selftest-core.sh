@@ -28,6 +28,9 @@ guard() { local s=${2-sess-a} p=1; [ "$s" != sess-a ] || p=$$; printf '{"session
 asks() { out=$(guard "$1") && printf %s "$out" | jq -e '.hookSpecificOutput | .hookEventName == "PreToolUse" and .permissionDecision == "ask" and (.permissionDecisionReason | contains(".coddy.yml"))'; }
 wire() { printf '{"tool_use_id":"%s"}' "$2" | run "$1"; }
 tripped() { wire snap w; (cd "$repo" && eval "$3") >/dev/null 2>&1; t "$1" "$2" wire trip w; }
+# report <name> <shell snippet>: as tripped, with trip's exit in $r and its report in $out
+report() { wire snap w; (cd "$repo" && eval "$2") >/dev/null 2>&1; out=$(wire trip w 2>&1); r=$?; t 0 "$1" test "$r" = 2; }
+snapfile="${TMPDIR:-/tmp}/coddy-snap-$(printf %s "$repo" | cksum | cut -d' ' -f1)-w"
 # rooted <dir> [VAR=value...]: status run from that directory prints the project root
 rooted() { d=$1; shift; (cd "$d" && env "$@" "$here/bin/coddy" status | grep -qx "root: $repo"); }
 # A PATH with everything the guard needs but jq.
@@ -49,6 +52,7 @@ t 0 "detect: no config" says '^config: none$' run detect
 t 0 "detect: no legacy config" says '^legacy_config: none$' run detect
 t 0 "guard allows everything before onboarding" guard "$repo/README.md"
 t 0 "guard asks nothing for .coddy.yml before onboarding" test -z "$(guard "$repo/.coddy.yml")"
+t 0 "trip without a snapshot is quiet before onboarding" wire trip none
 
 printf 'tracker: github\nworktree: git\ndefault_branch: main\nverify: test -f ok.txt\n' > .claude/coddy.yml
 t 0 "config: the legacy file is read when it is the only one" says '^worktree: git$' run config
@@ -78,6 +82,7 @@ t 0 "warn: guard lets the main checkout through" guard "$repo/README.md"
 PATH="$tmp/nojq" t 2 "warn: guard without jq fails closed" guard "$repo/.coddy.yml"
 sed -i.bak '/^guard:/d' .coddy.yml && rm .coddy.yml.bak
 wire snap flow
+t 0 "snap makes .git/coddy, the witness that the project is in the workflow" test -d .git/coddy
 
 # The config lock holds both paths: .coddy.yml is restored, and one created
 # while .claude/coddy.yml was the live config is removed, so it cannot shadow it.
@@ -107,7 +112,7 @@ t 1 "config: and the link is gone" test -L .coddy.yml
 t 0 "config: a plain file with its content back" same .coddy.yml
 # A restore the file system refuses is reported as such, with its copy kept.
 if [ "$(id -u)" != 0 ]; then
-  copy="${TMPDIR:-/tmp}/coddy-snap-$(printf %s "$repo" | cksum | cut -d' ' -f1)-w..coddy.yml"
+  copy="$snapfile..coddy.yml"
   wire snap w; rm .coddy.yml; chmod a-w .; out=$(wire trip w 2>&1); r=$?; chmod u+w .
   t 0 "config: a restore the directory refuses still trips" test "$r" = 2
   t 0 "config: and says the file could not be put back" grep -q 'could not be put back' <<<"$out"
@@ -143,6 +148,43 @@ git reset -q --hard origin/main
 tripped 2 "config: so does one pushed to a branch the changed config names as default" 'sed -i.bak "s/^default_branch:.*/default_branch: x/" .coddy.yml && rm .coddy.yml.bak && git commit -qam x && git push -q origin HEAD:refs/heads/x'
 t 0 "config: and is restored" same .coddy.yml
 git reset -q --hard origin/main
+# refs/remotes/origin/main is the command's to write, so trip reads it as
+# snap recorded it unless origin confirms where a fetch moved it: a commit on
+# main hidden behind it, or a config change passed off as pulled through it,
+# trips, and the ref is put back.
+real() { git ls-remote origin refs/heads/main | cut -f1; }
+report "config: a change passed off as pulled by writing refs/remotes/origin/main trips" 'echo "guard: warn" >> .coddy.yml && git commit -qam warn && git update-ref refs/remotes/origin/main HEAD'
+t 0 "config: and is restored" same .coddy.yml
+t 0 "config: and the ref is back where origin has it" test "$(git rev-parse refs/remotes/origin/main)" = "$(real)"
+t 0 "config: and the report says so" grep -q 'refs/remotes/origin/main' <<<"$out"
+git reset -q --hard origin/main
+report "a commit on main hidden behind a written refs/remotes/origin/main trips" 'git commit -q --allow-empty -m x && git update-ref refs/remotes/origin/main HEAD'
+t 0 "and that report names the commit" grep -q 'commits on main' <<<"$out"
+t 0 "and the ref is back where origin has it" test "$(git rev-parse refs/remotes/origin/main)" = "$(real)"
+git reset -q --hard origin/main
+git clone -q -b main "$tmp/origin.git" "$tmp/mate" 2>/dev/null
+upstream() { (cd "$tmp/mate" && echo "$1" >> .coddy.yml && git commit -q -am up && git push -q origin HEAD:main); }
+upstream 'roadmap: Y.md'
+tripped 0 "config: a pulled change stands, origin confirming where the fetch moved the ref" 'git fetch -q origin && git merge -q --ff-only origin/main'
+t 0 "config: and is kept" grep -q '^roadmap: Y.md$' .coddy.yml
+upstream 'roadmap: Z.md'
+tripped 2 "config: a pulled change origin cannot confirm afterwards is put back" 'git fetch -q origin && git merge -q --ff-only origin/main && git remote set-url origin "$tmp/gone.git"'
+t 1 "config: so .coddy.yml is as it was" grep -q '^roadmap: Z.md$' .coddy.yml
+t 0 "config: and so is the ref" test "$(git rev-parse refs/remotes/origin/main)" = "$(git rev-parse HEAD~1)"
+git remote set-url origin "$tmp/origin.git"; git checkout -q -- .coddy.yml
+# The snapshot is what trip checks a command against, so a command that
+# removes it is rejected while a config or a lock directory says the project
+# is in the workflow; trip is quiet without one only where snap wrote none.
+report "snapshot: a command that removes it trips" 'rm -f "$snapfile"'
+t 0 "snapshot: and the report names it" grep -q "$snapfile" <<<"$out"
+tripped 2 "snapshot: so does one that removes it with the config, .git/coddy left behind" 'rm -f "$snapfile" .coddy.yml'
+git checkout -q -- .coddy.yml
+mv .coddy.yml "$tmp/aside"
+t 2 "snapshot: trip without one trips while .git/coddy remains after the config is gone" wire trip none
+t 0 "snapshot: and says to remove .git/coddy with the config" says '.git/coddy' wire trip none
+rm -r .git/coddy
+t 0 "snapshot: and is quiet once both are gone, the project out of the workflow" wire trip none
+mv "$tmp/aside" .coddy.yml
 
 # No agent-dir rules without CODDY_AGENT_DIR; with it, its directory is free
 # and its worktrees/ held to the lock.
