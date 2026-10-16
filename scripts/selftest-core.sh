@@ -93,6 +93,27 @@ t 1 "config: and the link is gone" test -L .coddy.yml
 t 0 "config: a file with its content back" same .coddy.yml
 tripped 2 "config: a directory in its place trips" 'rm .coddy.yml && mkdir .coddy.yml'
 t 0 "config: and the file is back" same .coddy.yml
+# A config the user keeps as a link is not a change; retargeting the link,
+# or writing the file behind it, is, and what comes back is a plain file.
+mv .coddy.yml "$tmp/linked"; ln -s "$tmp/linked" .coddy.yml
+tripped 0 "config: a config that was a link already is left alone" 'true'
+t 0 "config: and is still that link" test -L .coddy.yml
+tripped 2 "config: retargeting the link trips, the same content behind it" 'ln -sf "$tmp/else" .coddy.yml'
+t 1 "config: and the link is gone" test -L .coddy.yml
+t 0 "config: a plain file with its content back" same .coddy.yml
+ln -sf "$tmp/linked" .coddy.yml
+tripped 2 "config: writing the file behind the link trips" 'echo "verify: true" >> "$tmp/linked"'
+t 1 "config: and the link is gone" test -L .coddy.yml
+t 0 "config: a plain file with its content back" same .coddy.yml
+# A restore the file system refuses is reported as such, with its copy kept.
+if [ "$(id -u)" != 0 ]; then
+  copy="${TMPDIR:-/tmp}/coddy-snap-$(printf %s "$repo" | cksum | cut -d' ' -f1)-w..coddy.yml"
+  wire snap w; rm .coddy.yml; chmod a-w .; out=$(wire trip w 2>&1); r=$?; chmod u+w .
+  t 0 "config: a restore the directory refuses still trips" test "$r" = 2
+  t 0 "config: and says the file could not be put back" grep -q 'could not be put back' <<<"$out"
+  t 0 "config: keeping its copy" cmp -s "$copy" "$tmp/conf.orig"
+  cp "$tmp/conf.orig" .coddy.yml; rm -f "$copy"
+fi
 mv .coddy.yml .claude/coddy.yml
 tripped 2 "config: a .coddy.yml created next to the live legacy file trips" 'cp .claude/coddy.yml .coddy.yml'
 t 1 "config: and is removed" test -e .coddy.yml
@@ -100,6 +121,9 @@ t 0 "config: the legacy file stands" same .claude/coddy.yml
 ln -s ../.coddy.yml .claude/cfg
 CODDY_AGENT_DIR=.claude t 0 "guard asks on a dangling link to .coddy.yml from the agent dir while the legacy file is live" asks "$repo/.claude/cfg"
 rm .claude/cfg
+ln -s ../.coddy.yml .claude/c10; for i in 9 8 7 6 5 4 3 2 1; do ln -s "c$((i+1))" ".claude/c$i"; done
+CODDY_AGENT_DIR=.claude t 0 "guard asks through a dangling chain of ten links" asks "$repo/.claude/c1"
+rm .claude/c[0-9]*
 tripped 2 "config: deleting the legacy file trips" 'rm .claude/coddy.yml'
 t 0 "config: the legacy file is restored" same .claude/coddy.yml
 # Once .coddy.yml is live the legacy file is ignored, so the lock lets it go.
@@ -160,6 +184,9 @@ t 0 "shim: the root is CLAUDE_PROJECT_DIR, not an inherited CODDY_ROOT" says "^r
 t 0 "shim: the session and pid are CLAUDE_*'s, so the owner's inherited ones do not make the claim mine" says '^owners: 1=sess-a (running)' shim status
 t 2 "shim: the agent dir is .claude, not an inherited CODDY_AGENT_DIR" shimguard "$repo/src/x.c"
 t 0 "shim: and .claude/ is free" shimguard "$repo/.claude/n.md"
+shimv() { CLAUDE_PROJECT_DIR=$repo CODDY_ROOT=/ bash "$here/scripts/$1.sh"; }
+t 0 "shim: config.sh takes the root from CLAUDE_PROJECT_DIR too" says '^tracker: github$' shimv config
+t 0 "shim: so does detect.sh" says '^config: present$' shimv detect
 CODDY_AGENT_DIR=.codex t 0 "agent dir: its worktree of a claimed issue is editable" guard "$repo/.codex/worktrees/1/a.txt"
 echo x > .worktrees/1/a.txt
 t 1 "push refuses another session" as sess-b 1 push 1 "feat(1): thing"

@@ -169,7 +169,9 @@ if [ "${1-}" = guard ]; then
   # The physical path a write to $1 lands on: symlinks followed in every
   # component (a dangling one creates its target), ./, // and .. collapsed.
   # Fails when its directory does not exist, and no such path is the root.
-  phys() { local p=$1 t i=0; while [ -L "$p" ] && [ "$i" -lt 8 ]; do t=$(readlink "$p"); case "$t" in /*) p=$t ;; *) p="${p%/*}/$t" ;; esac; i=$((i+1)); done; t="${p%/*}"; t=$(cd "${t:-/}" 2>/dev/null && pwd -P) && printf '%s/%s' "$t" "${p##*/}"; }
+  # 40 links deep, as far as a kernel follows, so no chain a write can
+  # reach the file through is cut short here.
+  phys() { local p=$1 t i=0; while [ -L "$p" ] && [ "$i" -lt 40 ]; do t=$(readlink "$p"); case "$t" in /*) p=$t ;; *) p="${p%/*}/$t" ;; esac; i=$((i+1)); done; t="${p%/*}"; t=$(cd "${t:-/}" 2>/dev/null && pwd -P) && printf '%s/%s' "$t" "${p##*/}"; }
   # The off switch for every hook here, and no sensitive-file prompt of the
   # agent's own: the user allows each edit of it, in both modes, by whatever
   # path the write reaches it: its own spelling or one with ./, // or ..; a
@@ -254,45 +256,57 @@ if [ "${1-}" = snap ] || [ "${1-}" = trip ]; then
   id=$(jq -r '.tool_use_id // empty' 2>/dev/null)
   file="${TMPDIR:-/tmp}/coddy-snap-$(printf %s "$root" | cksum | cut -d' ' -f1)-${id:-shared}"
   # Both config paths are kept, present or not: a .coddy.yml the command
-  # makes next to a live .claude/coddy.yml would shadow it.
+  # makes next to a live .claude/coddy.yml would shadow it. A config the
+  # user keeps as a link is kept as its content and its target.
   if [ "$1" = snap ]; then
     [ -f "$conf" ] || exit 0
     snap | LC_ALL=C sort > "$file"; rm -f "$file".*
-    for c in .coddy.yml "$legacy"; do [ ! -f "$root/$c" ] || cp "$root/$c" "$file.${c//\//_}"; done
+    for c in .coddy.yml "$legacy"; do
+      p="$root/$c" s="$file.${c//\//_}"
+      [ ! -f "$p" ] || cp "$p" "$s"; [ ! -L "$p" ] || readlink "$p" > "$s.link"
+    done
     exit 0
   fi
   # A snapshot means the project was onboarded when the command started, so
   # trip must not look at the config first: the command may have removed it.
   [ -f "$file" ] || exit 0
-  code=2 msg=""
+  code=2 msg="" keep=""
   # The config is the off switch for every hook here, so a shell command may
   # not change it: put each path back as it was. A copy identical to the one
   # committed at HEAD, with HEAD on the remote's default branch, came from
   # git (a pull, a checkout) and stands; a commit made here is not, so the
   # change it holds is put back too. The default branch is read from the
-  # snapshot's copy of the config, not from what the command left. A link or
-  # a directory in the file's place is a change whatever it holds: a link
-  # reaches a file the lock does not watch. The legacy file is let go once
-  # .coddy.yml is live (settled first, above): it is ignored then and cannot
-  # change the effective config.
+  # snapshot's copy of the config, not from what the command left. A link
+  # that was not there, or points elsewhere, or a directory in the file's
+  # place is a change whatever it holds: a link reaches a file the lock does
+  # not watch; a link the user keeps there, as it was, is not. What is put
+  # back is a plain file. The legacy file is let go once .coddy.yml is live
+  # (settled first, above): it is ignored then and cannot change the
+  # effective config.
   for c in .coddy.yml "$legacy"; do pre="$file.${c//\//_}"; [ ! -f "$pre" ] || break; done
   b=$(cfg default_branch "$pre" 2>/dev/null); b="${b:-main}"
   for c in .coddy.yml "$legacy"; do
     p="$root/$c" s="$file.${c//\//_}"
     { [ "$c" = "$legacy" ] && [ -f "$root/.coddy.yml" ]; } && continue
-    { [ -f "$p" ] && [ ! -L "$p" ] && [ -f "$s" ] && cmp -s "$p" "$s"; } && continue
-    [ -e "$p" ] || [ -L "$p" ] || [ -f "$s" ] || continue
+    # Unchanged: the same link target (none for a plain file) and the same
+    # content, or absent before and after.
+    [ "$(readlink "$p" 2>/dev/null)" = "$(cat "$s.link" 2>/dev/null)" ] && { { [ -f "$p" ] && [ -f "$s" ] && cmp -s "$p" "$s"; } || { [ ! -e "$p" ] && [ ! -f "$s" ]; }; } && continue
     head=$(git -C "$root" rev-parse -q --verify "HEAD:$c" 2>/dev/null)
     { [ -f "$p" ] && [ ! -L "$p" ] && [ -n "$head" ] && [ "$(git hash-object "$p")" = "$head" ] && git -C "$root" merge-base --is-ancestor HEAD "refs/remotes/origin/$b" 2>/dev/null; } && continue
     rm -rf "$p"
-    if [ -f "$s" ]; then mkdir -p "${p%/*}" && cp "$s" "$p"; what=restored; else what=removed; fi
+    # A copy that cannot be written back is kept, and the report says so,
+    # rather than claiming the file is back.
+    if [ ! -f "$s" ]; then what=removed
+    elif mkdir -p "${p%/*}" && cp "$s" "$p"; then what=restored
+    else what="removed, and could not be put back: restore it by hand from the copy at $s"; keep=1
+    fi
     msg="${msg}that command changed $c, which switches the coddy guardrails, so it has been $what. "
   done
   [ -z "$msg" ] || msg="${msg}Settings change through /coddy:config; leaving the workflow is for the user to do by hand. "
   confpath
   # Only lines that are new count, so undoing a change never trips the wire.
   added=$(snap | LC_ALL=C sort | LC_ALL=C comm -13 "$file" - | sed 's/ [^ ]*$//' | tr '\n' ' ' | sed 's/ $//')
-  rm -f "$file" "$file".*
+  rm -f "$file"; [ -n "$keep" ] || rm -f "$file".*
   [ -n "$added" ] && msg="${msg}that command changed the main checkout: $added. Issue work belongs in .worktrees/<issue>/. Undo it."
   [ -z "$msg" ] && exit 0
   die "$msg"
