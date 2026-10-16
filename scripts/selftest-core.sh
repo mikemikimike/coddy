@@ -52,9 +52,12 @@ t 0 "detect: no config" says '^config: none$' run detect
 t 0 "detect: no legacy config" says '^legacy_config: none$' run detect
 t 0 "guard allows everything before onboarding" guard "$repo/README.md"
 t 0 "guard asks nothing for .coddy.yml before onboarding" test -z "$(guard "$repo/.coddy.yml")"
-t 0 "trip without a snapshot is quiet before onboarding" wire trip none
+t 2 "trip without a snapshot trips before onboarding too: snap writes one before every command" wire trip none
+tripped 0 "before onboarding: a shell write to the main checkout is quiet" 'echo x > stray.txt'; rm stray.txt
+t 1 "before onboarding: snap made nothing under .git" test -e .git/coddy
 
-printf 'tracker: github\nworktree: git\ndefault_branch: main\nverify: test -f ok.txt\n' > .claude/coddy.yml
+tripped 0 "onboarding: the command that writes the config is let through" 'printf "tracker: github\nworktree: git\ndefault_branch: main\nverify: test -f ok.txt\n" > .claude/coddy.yml'
+t 0 "onboarding: and the config stands" test -f .claude/coddy.yml
 t 0 "config: the legacy file is read when it is the only one" says '^worktree: git$' run config
 t 0 "status names the legacy file" says '^config: .claude/coddy.yml$' run status
 t 0 "detect: config present with the legacy file alone" says '^config: present$' run detect
@@ -82,7 +85,6 @@ t 0 "warn: guard lets the main checkout through" guard "$repo/README.md"
 PATH="$tmp/nojq" t 2 "warn: guard without jq fails closed" guard "$repo/.coddy.yml"
 sed -i.bak '/^guard:/d' .coddy.yml && rm .coddy.yml.bak
 wire snap flow
-t 0 "snap makes .git/coddy, the witness that the project is in the workflow" test -d .git/coddy
 
 # The config lock holds both paths: .coddy.yml is restored, and one created
 # while .claude/coddy.yml was the live config is removed, so it cannot shadow it.
@@ -153,37 +155,61 @@ git reset -q --hard origin/main
 # main hidden behind it, or a config change passed off as pulled through it,
 # trips, and the ref is put back.
 real() { git ls-remote origin refs/heads/main | cut -f1; }
+trusted() { cut -d' ' -f2 .git/coddy/up; } # the commit trip last trusted at origin/main
 report "config: a change passed off as pulled by writing refs/remotes/origin/main trips" 'echo "guard: warn" >> .coddy.yml && git commit -qam warn && git update-ref refs/remotes/origin/main HEAD'
 t 0 "config: and is restored" same .coddy.yml
 t 0 "config: and the ref is back where origin has it" test "$(git rev-parse refs/remotes/origin/main)" = "$(real)"
 t 0 "config: and the report says so" grep -q 'refs/remotes/origin/main' <<<"$out"
+t 0 "config: and .git/coddy/up records the commit origin holds" test "$(trusted)" = "$(real)"
 git reset -q --hard origin/main
 report "a commit on main hidden behind a written refs/remotes/origin/main trips" 'git commit -q --allow-empty -m x && git update-ref refs/remotes/origin/main HEAD'
 t 0 "and that report names the commit" grep -q 'commits on main' <<<"$out"
 t 0 "and the ref is back where origin has it" test "$(git rev-parse refs/remotes/origin/main)" = "$(real)"
+git reset -q --hard origin/main
+# A put-back the ref refuses (a stale lock) is reported as such, and the
+# commit trip trusts outlives the snapshot in .git/coddy/up, so the next snap
+# reads it there rather than off the ref the command left forged.
+report "config: a forged ref the put-back cannot move still trips" 'echo "guard: warn" >> .coddy.yml && git commit -qam warn && git update-ref refs/remotes/origin/main HEAD && touch .git/refs/remotes/origin/main.lock'
+t 0 "config: and is restored" same .coddy.yml
+t 0 "config: and the report says the ref could not be put back" grep -q 'could not be put back' <<<"$out"
+t 0 "config: and .git/coddy/up keeps the commit origin holds" test "$(trusted)" = "$(real)"
+rm .git/refs/remotes/origin/main.lock
+tripped 2 "config: so a checkout of the committed warn config trips, the ref still forged" 'git checkout -- .coddy.yml'
+t 0 "config: and is restored" same .coddy.yml
+t 0 "config: and the ref is put back now" test "$(git rev-parse refs/remotes/origin/main)" = "$(real)"
+git reset -q --hard origin/main
+# A symref in the ref's place is replaced, not written through to its target.
+unref() { [ -z "$(git symbolic-ref -q refs/remotes/origin/main)" ] && [ "$(git rev-parse refs/remotes/origin/main)" = "$(real)" ] && [ "$(git rev-parse refs/heads/main)" != "$(real)" ]; }
+report "a symref written at refs/remotes/origin/main trips" 'git commit -q --allow-empty -m x && git symbolic-ref refs/remotes/origin/main refs/heads/main'
+t 0 "and the put-back replaced the symref, leaving refs/heads/main as the command left it" unref
 git reset -q --hard origin/main
 git clone -q -b main "$tmp/origin.git" "$tmp/mate" 2>/dev/null
 upstream() { (cd "$tmp/mate" && echo "$1" >> .coddy.yml && git commit -q -am up && git push -q origin HEAD:main); }
 upstream 'roadmap: Y.md'
 tripped 0 "config: a pulled change stands, origin confirming where the fetch moved the ref" 'git fetch -q origin && git merge -q --ff-only origin/main'
 t 0 "config: and is kept" grep -q '^roadmap: Y.md$' .coddy.yml
+t 0 "config: and .git/coddy/up moved with it" test "$(trusted)" = "$(real)"
+upstream 'roadmap: Y2.md'
+git fetch -q origin # outside any command: snap still reads .git/coddy/up, and the next trip asks origin
+tripped 0 "a fetch outside the hooks is confirmed by origin at the next trip" 'true'
+t 0 "and .git/coddy/up moved with it" test "$(trusted)" = "$(real)"
+git merge -q --ff-only origin/main
 upstream 'roadmap: Z.md'
 tripped 2 "config: a pulled change origin cannot confirm afterwards is put back" 'git fetch -q origin && git merge -q --ff-only origin/main && git remote set-url origin "$tmp/gone.git"'
 t 1 "config: so .coddy.yml is as it was" grep -q '^roadmap: Z.md$' .coddy.yml
 t 0 "config: and so is the ref" test "$(git rev-parse refs/remotes/origin/main)" = "$(git rev-parse HEAD~1)"
+t 0 "config: and so is .git/coddy/up" test "$(trusted)" = "$(git rev-parse HEAD~1)"
 git remote set-url origin "$tmp/origin.git"; git checkout -q -- .coddy.yml
 # The snapshot is what trip checks a command against, so a command that
-# removes it is rejected while a config or a lock directory says the project
-# is in the workflow; trip is quiet without one only where snap wrote none.
+# removes it, or its copy of the config, is rejected; a project that left the
+# workflow by hand, its config gone and .git/coddy kept, is quiet.
 report "snapshot: a command that removes it trips" 'rm -f "$snapfile"'
 t 0 "snapshot: and the report names it" grep -q "$snapfile" <<<"$out"
 tripped 2 "snapshot: so does one that removes it with the config, .git/coddy left behind" 'rm -f "$snapfile" .coddy.yml'
 git checkout -q -- .coddy.yml
+tripped 2 "snapshot: so does one that removes its copy of the config" 'rm -f "$snapfile".*'
 mv .coddy.yml "$tmp/aside"
-t 2 "snapshot: trip without one trips while .git/coddy remains after the config is gone" wire trip none
-t 0 "snapshot: and says to remove .git/coddy with the config" says '.git/coddy' wire trip none
-rm -r .git/coddy
-t 0 "snapshot: and is quiet once both are gone, the project out of the workflow" wire trip none
+tripped 0 "snapshot: quiet once the config is gone, .git/coddy kept" 'true'
 mv "$tmp/aside" .coddy.yml
 
 # No agent-dir rules without CODDY_AGENT_DIR; with it, its directory is free
@@ -226,9 +252,15 @@ t 0 "shim: the root is CLAUDE_PROJECT_DIR, not an inherited CODDY_ROOT" says "^r
 t 0 "shim: the session and pid are CLAUDE_*'s, so the owner's inherited ones do not make the claim mine" says '^owners: 1=sess-a (running)' shim status
 t 2 "shim: the agent dir is .claude, not an inherited CODDY_AGENT_DIR" shimguard "$repo/src/x.c"
 t 0 "shim: and .claude/ is free" shimguard "$repo/.claude/n.md"
+# GIT_* from the environment (a settings env reaches the hooks) could move
+# root resolution to another repository, where no config is: dropped.
+GIT_DIR="$tmp/origin.git" t 0 "shim: GIT_DIR in the environment does not move the root" says "^root: $repo\$" shim status
+GIT_DIR="$tmp/origin.git" t 2 "shim: so the guard still blocks the main checkout" shimguard "$repo/README.md"
 shimv() { CLAUDE_PROJECT_DIR=$repo CODDY_ROOT=/ bash "$here/scripts/$1.sh"; }
 t 0 "shim: config.sh takes the root from CLAUDE_PROJECT_DIR too" says '^tracker: github$' shimv config
 t 0 "shim: so does detect.sh" says '^config: present$' shimv detect
+GIT_DIR="$tmp/origin.git" t 0 "shim: config.sh drops GIT_DIR too" says '^tracker: github$' shimv config
+GIT_DIR="$tmp/origin.git" t 0 "shim: so does detect.sh" says '^config: present$' shimv detect
 CODDY_AGENT_DIR=.codex t 0 "agent dir: its worktree of a claimed issue is editable" guard "$repo/.codex/worktrees/1/a.txt"
 echo x > .worktrees/1/a.txt
 t 1 "push refuses another session" as sess-b 1 push 1 "feat(1): thing"
@@ -237,6 +269,10 @@ t 0 "and says so" says "verify" run ship 1 "feat(1): thing"
 t 2 "and pushed nothing" git ls-remote --exit-code origin refs/heads/feat/1-thing
 t 0 "push alone pushes without verify" says 'pushed: feat/1-thing' run push 1 "feat(1): thing"
 t 0 "the branch reached the remote" git ls-remote --exit-code origin refs/heads/feat/1-thing
+# The identity in GIT_AUTHOR_* and GIT_COMMITTER_* is kept by the shim (no
+# git config holds one under this HOME), as the discovery variables are not.
+echo y > .worktrees/1/b.txt
+HOME="$tmp" GIT_DIR="$tmp/origin.git" t 0 "shim: push commits with the environment's identity, GIT_DIR dropped" says 'pushed: feat/1-thing' shim push 1 "feat(1): more"
 was=$(git ls-remote origin refs/heads/feat/1-thing)
 echo ok > .worktrees/1/ok.txt
 t 0 "verify passes now" run verify 1

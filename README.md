@@ -188,9 +188,9 @@ review_rounds: 3             # optional; 1-5 (default 3)
   leaves the key out; set it with `/coddy:config guard=warn`.
 - `.claude/coddy.yml`, where earlier versions kept the config, is still read
   while `.coddy.yml` is absent; `/coddy:config` offers to move it.
-- Delete the file and `.git/coddy` yourself to leave the workflow (while
-  `.git/coddy` remains, the shell tripwire rejects every command as one that
-  removed its snapshot). Every other skill refuses to run without the file.
+- Delete the file yourself to leave the workflow (`.git/coddy`, where claims
+  and the tripwire keep their records, can go with it). Every other skill
+  refuses to run without the file.
 
 ## Contributing
 

@@ -260,14 +260,20 @@ if [ "${1-}" = snap ] || [ "${1-}" = trip ]; then
   # makes next to a live .claude/coddy.yml would shadow it. A config the
   # user keeps as a link is kept as its content and its target.
   remote() { git -C "$root" rev-parse -q --verify "refs/remotes/origin/$b" 2>/dev/null; }
+  # The commit trusted at origin/$b outlives one command in .git/coddy/up
+  # ("<branch> <commit>"): trip writes it once origin confirmed a move or the
+  # ref was put back, and snap reads it from there rather than off the ref,
+  # which may still hold what a command wrote (a put-back the ref refused).
+  rec="$root/.git/coddy/up"
   if [ "$1" = snap ]; then
-    [ -f "$conf" ] || exit 0
-    b=$(cfg default_branch); b="${b:-main}"; up=$(remote)
-    # .git/coddy is the witness that the project is in the workflow, for a
-    # trip that finds neither the snapshot nor the config: made here, so it
-    # is there from the first shell command, not only from the first claim.
-    [ ! -d "$root/.git" ] || mkdir -p "$root/.git/coddy" 2>/dev/null
-    snap | LC_ALL=C sort > "$file"; rm -f "$file".*
+    # A snapshot before every command, so trip can tell a command that
+    # removed it from one run outside the workflow: NOT_ONBOARDED alone where
+    # no config is, and the hooks stay inert.
+    rm -f "$file".*
+    [ -f "$conf" ] || { echo NOT_ONBOARDED > "$file"; exit 0; }
+    b=$(cfg default_branch); b="${b:-main}"
+    { read -r k up < "$rec" && [ "$k" = "$b" ]; } 2>/dev/null || up=$(remote)
+    snap | LC_ALL=C sort > "$file"
     echo "$up" > "$file.up"
     for c in .coddy.yml "$legacy"; do
       p="$root/$c" s="$file.${c//\//_}"
@@ -276,16 +282,16 @@ if [ "${1-}" = snap ] || [ "${1-}" = trip ]; then
     exit 0
   fi
   code=2 msg="" keep="" moved=""
-  # A snapshot means the project was onboarded when the command started, so
-  # trip must not look at the config first: the command may have removed it.
-  # No snapshot while a config or a lock directory is there is one the
-  # command removed (snap writes one whenever the config exists), and then
-  # what the command did cannot be checked: rejected. Quiet without one only
-  # where snap wrote none, a project outside the workflow.
-  if [ ! -f "$file" ]; then
-    [ -f "$conf" ] || [ -d "$root/.git/coddy" ] || exit 0
-    die "that command left no snapshot of the main checkout at $file, so what it changed cannot be checked: a command may not touch the snapshot. Undo what it did. If the user has left the workflow by hand, removing the config, remove .git/coddy too."
-  fi
+  # The snapshot says whether the project was onboarded when the command
+  # started, so trip never looks at the config first: the command may have
+  # removed it, or made it. No snapshot, or one without its copy of the
+  # config, is one the command touched, and then what it did cannot be
+  # checked: rejected. Not onboarded then: quiet, the command that wrote
+  # the config included.
+  for c in .coddy.yml "$legacy"; do pre="$file.${c//\//_}"; [ ! -f "$pre" ] || break; done
+  [ -f "$file" ] && { [ -f "$pre" ] || grep -qx NOT_ONBOARDED "$file"; } ||
+    die "that command left no snapshot of the main checkout at $file, so what it changed cannot be checked: a command may not touch the snapshot. Undo what it did."
+  [ -f "$pre" ] || { rm -f "$file" "$file".*; exit 0; }
   # The config is the off switch for every hook here, so a shell command may
   # not change it: put each path back as it was. A copy identical to the one
   # committed at HEAD, with HEAD on the remote's default branch, came from
@@ -298,19 +304,28 @@ if [ "${1-}" = snap ] || [ "${1-}" = trip ]; then
   # back is a plain file. The legacy file is let go once .coddy.yml is live
   # (settled first, above): it is ignored then and cannot change the
   # effective config.
-  for c in .coddy.yml "$legacy"; do pre="$file.${c//\//_}"; [ ! -f "$pre" ] || break; done
   b=$(cfg default_branch "$pre" 2>/dev/null); b="${b:-main}"
   # The remote's default branch is trusted where snap recorded it, or where
   # a fetch moved it when origin says that is where it stands: the command
   # can write refs/remotes/origin/$b itself, and through it hide a commit
   # on $b or pass off a config change as pulled, in this command or a later
   # one. A move origin does not confirm, or cannot be asked about, is put
-  # back and reported, so it does not become the next snapshot's truth.
+  # back and reported, so it does not become the next snapshot's truth; a
+  # put-back the ref refuses is reported as such, and the trusted commit
+  # goes to .git/coddy/up either way, so the next snap does not read the
+  # ref. --no-deref: a symref written there is replaced, not its target.
   was=$(cat "$file.up" 2>/dev/null); up=$(remote)
   [ "$up" = "$was" ] || { r=$(git -C "$root" ls-remote --exit-code origin "refs/heads/$b" 2>/dev/null) && [ "${r%%[[:space:]]*}" = "$up" ]; } || {
-    if [ -n "$was" ]; then git -C "$root" update-ref "refs/remotes/origin/$b" "$was"; else git -C "$root" update-ref -d "refs/remotes/origin/$b"; fi 2>/dev/null
-    up=$was; moved="that command moved refs/remotes/origin/$b to a commit origin does not hold at $b, so it has been put back; fetch it from origin. "
+    moved="that command moved refs/remotes/origin/$b to a commit origin does not hold at $b, "
+    if { if [ -n "$was" ]; then git -C "$root" update-ref --no-deref "refs/remotes/origin/$b" "$was"; else git -C "$root" update-ref --no-deref -d "refs/remotes/origin/$b"; fi; } 2>/dev/null; then
+      moved="${moved}so it has been put back; fetch it from origin. "
+    else
+      moved="${moved}and it could not be put back: fetch it from origin. "
+    fi
+    up=$was
   }
+  [ ! -d "$root/.git" ] || [ "$(cat "$rec" 2>/dev/null)" = "$b $up" ] || { mkdir -p "${rec%/*}" && echo "$b $up" > "$rec"; } 2>/dev/null ||
+    moved="${moved}the commit trusted at origin/$b could not be recorded in .git/coddy/up, so the next command's snapshot reads the ref as it stands. "
   for c in .coddy.yml "$legacy"; do
     p="$root/$c" s="$file.${c//\//_}"
     { [ "$c" = "$legacy" ] && [ -f "$root/.coddy.yml" ]; } && continue
