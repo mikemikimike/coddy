@@ -256,9 +256,12 @@ if [ "${1-}" = snap ] || [ "${1-}" = trip ]; then
   code=2 msg=""
   # The config is the off switch for every hook here, so a shell command may
   # not change it: put each path back as it was. A copy identical to the one
-  # committed at HEAD came from git (a pull, a checkout) and stands.
+  # committed at HEAD came from git (a pull, a checkout) and stands. The
+  # legacy file is let go once .coddy.yml is live (settled first, above): it
+  # is ignored then and cannot change the effective config.
   for c in .coddy.yml "$legacy"; do
     p="$root/$c" s="$file.${c//\//_}"
+    { [ "$c" = "$legacy" ] && [ -f "$root/.coddy.yml" ]; } && continue
     { [ -f "$p" ] && [ -f "$s" ] && cmp -s "$p" "$s"; } && continue
     [ -f "$p" ] || [ -f "$s" ] || continue
     head=$(git -C "$root" rev-parse -q --verify "HEAD:$c" 2>/dev/null)

@@ -92,7 +92,13 @@ t 1 "config: and is removed" test -e .coddy.yml
 t 0 "config: the legacy file stands" same .claude/coddy.yml
 tripped 2 "config: deleting the legacy file trips" 'rm .claude/coddy.yml'
 t 0 "config: the legacy file is restored" same .claude/coddy.yml
-mv .claude/coddy.yml .coddy.yml
+# Once .coddy.yml is live the legacy file is ignored, so the lock lets it go.
+# .claude is the agent dir here, as from the shims, so the tripwire skips it too.
+cp .claude/coddy.yml .coddy.yml
+CODDY_AGENT_DIR=.claude tripped 0 "config: changing the legacy file next to a live .coddy.yml is quiet" 'echo "verify: true" >> .claude/coddy.yml'
+t 0 "config: and the change stands" grep -q '^verify: true$' .claude/coddy.yml
+CODDY_AGENT_DIR=.claude tripped 0 "config: deleting the legacy file next to a live .coddy.yml is quiet" 'rm .claude/coddy.yml'
+t 1 "config: and it is not restored" test -e .claude/coddy.yml
 git add -f .coddy.yml && git commit -q -m conf && git push -q origin main
 echo 'roadmap: X.md' >> .coddy.yml
 tripped 0 "config: a checkout of the committed .coddy.yml stands" 'git checkout -- .coddy.yml'
