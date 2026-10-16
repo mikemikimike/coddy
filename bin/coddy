@@ -274,7 +274,7 @@ if [ "${1-}" = snap ] || [ "${1-}" = trip ]; then
     done
     exit 0
   fi
-  code=2 msg="" keep="" up=""
+  code=2 msg="" keep="" up="" asked=""
   # The snapshot says whether the project was onboarded when the command
   # started, so trip never looks at the config first: the command may have
   # removed it, or made it. No snapshot, or one without its copy of the
@@ -286,30 +286,36 @@ if [ "${1-}" = snap ] || [ "${1-}" = trip ]; then
     die "that command left no snapshot of the main checkout at $file, so what it changed cannot be checked: a command may not touch the snapshot. Undo what it did."
   [ -f "$pre" ] || { rm -f "$file" "$file".*; exit 0; }
   # The config is the off switch for every hook here, so a shell command may
-  # not change it: put each path back as it was. A plain file holding what
-  # origin has at the default branch came from git (a pull of a shared
-  # config) and stands: origin is asked once (ls-remote), only when a config
-  # path changed, with system and global git config ignored, since a
-  # url.insteadOf there would answer in origin's name (so a remote that
-  # needs a global insteadOf cannot confirm, and the pull is put back);
-  # their credential.* keys alone are passed back as -c, in order and
-  # whole, since a helper supplies a password and cannot move the URL, and
+  # not change it: each path that changed is put back as it was, first, and
+  # only then is origin asked about the command's plain file, kept aside; a
+  # trip cut short while asking (a slow credential helper, the hook's
+  # timeout) so leaves the restored config in place. A plain file holding
+  # what origin has at the default branch came from git (a pull of a shared
+  # config) and goes back in the restored one's place, unreported: origin is
+  # asked once (ls-remote), only when a config path changed, with system and
+  # global git config ignored, since a url.insteadOf there would answer in
+  # origin's name (so a remote that needs a global insteadOf cannot confirm,
+  # and the pull stays put back); their credential.* keys alone are carried,
+  # in order and whole, in a config file of their own standing in for the
+  # global one, so .git/config outranks them as it does for git (a helper
+  # supplies a password and cannot move the URL; a subsection holding = is
+  # more than -c could carry), helpers are told not to prompt, and
   # safe.directory is set to the root, which that config may have held too.
   # The exact ref is taken, since ls-remote matches its pattern against the
-  # tail of every ref and a pushed a/refs/heads/<b> would be listed first.
-  # No local ref is trusted or moved, since a shell command
-  # can write any of them, and replace objects are ignored, since a command
-  # can plant one that maps the tip's tree to the changed file; a commit made
-  # here, a checkout of an older one, a change origin cannot be asked about,
-  # a path the tip does not hold, or a file git cannot hash is put back
-  # (empty on both sides is no match). The default branch
-  # is read from the snapshot's copy of the config, not from what the
-  # command left. A link that was not there, or points elsewhere, or a
-  # directory in the file's place is a change whatever it holds: a link
-  # reaches a file the lock does not watch; a link the user keeps there, as
-  # it was, is not. What is put back is a plain file. The legacy file is let
-  # go once .coddy.yml is live (settled first, above): it is ignored then
-  # and cannot change the effective config.
+  # tail of every ref and a pushed a/refs/heads/<b> would be listed first,
+  # and only a commit id it names is looked up: no local ref is trusted or
+  # moved, since a shell command can write any of them (a branch named none
+  # included), and replace objects are ignored, since a command can plant one
+  # that maps the tip's tree to the changed file; a commit made here, a
+  # checkout of an older one, a change origin cannot be asked about, a path
+  # the tip does not hold, or a file git cannot hash stays put back (empty on
+  # both sides is no match). The default branch is read from the snapshot's
+  # copy of the config, not from what the command left. A link that was not
+  # there, or points elsewhere, or a directory in the file's place is a
+  # change whatever it holds: a link reaches a file the lock does not watch;
+  # a link the user keeps there, as it was, is not. What is put back is a
+  # plain file. The legacy file is let go once .coddy.yml is live (settled
+  # first, above): it is ignored then and cannot change the effective config.
   b=$(cfg default_branch "$pre" 2>/dev/null); b="${b:-main}"
   for c in .coddy.yml "$legacy"; do
     p="$root/$c" s="$file.${c//\//_}"
@@ -317,15 +323,7 @@ if [ "${1-}" = snap ] || [ "${1-}" = trip ]; then
     # Unchanged: the same link target (none for a plain file) and the same
     # content, or absent before and after.
     [ "$(readlink "$p" 2>/dev/null)" = "$(cat "$s.link" 2>/dev/null)" ] && { { [ -f "$p" ] && [ -f "$s" ] && cmp -s "$p" "$s"; } || { [ ! -e "$p" ] && [ ! -f "$s" ]; }; } && continue
-    if [ -f "$p" ] && [ ! -L "$p" ]; then
-      if [ -z "$up" ]; then
-        gc=(-c "safe.directory=$root")
-        while IFS= read -r -d '' kv; do gc+=(-c "${kv/$'\n'/=}"); done < <(for s in --system --global; do git -C "$root" config -z "$s" --get-regexp '^credential\.' 2>/dev/null; done)
-        up=$(GIT_TERMINAL_PROMPT=0 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null git -C "$root" "${gc[@]}" ls-remote origin "refs/heads/$b" 2>/dev/null | awk -v r="refs/heads/$b" '$2 == r { print $1; exit }'); up="${up:-none}"
-      fi
-      want=$(GIT_NO_REPLACE_OBJECTS=1 git -C "$root" rev-parse -q --verify "$up:$c" 2>/dev/null)
-      [ -n "$want" ] && [ "$want" = "$(git hash-object "$p" 2>/dev/null)" ] && continue
-    fi
+    new=""; { [ -f "$p" ] && [ ! -L "$p" ] && cp "$p" "$s.new" 2>/dev/null; } && new=$(git hash-object "$s.new" 2>/dev/null)
     rm -rf "$p"
     # A copy that cannot be written back is kept, and the report says so,
     # rather than claiming the file is back.
@@ -333,13 +331,28 @@ if [ "${1-}" = snap ] || [ "${1-}" = trip ]; then
     elif mkdir -p "${p%/*}" && cp "$s" "$p"; then what=restored
     else what="removed, and could not be put back: restore it by hand from the copy at $s"; keep=1
     fi
+    want=""
+    if [ -n "$new" ]; then
+      if [ -z "$asked" ]; then
+        asked=1 cred="$file.cred"; : > "$cred"
+        while IFS= read -r -d '' scope && IFS= read -r -d '' kv; do
+          case "$scope" in system|global) ;; *) continue ;; esac
+          k="${kv%%$'\n'*}" v="${kv#*$'\n'}"; [ "$kv" != "$k" ] || v=true
+          git config -f "$cred" --add "$k" "$v" 2>/dev/null
+        done < <(git -C "$root" -c "safe.directory=$root" config -z --show-scope --get-regexp '^credential\.' 2>/dev/null)
+        up=$(GIT_TERMINAL_PROMPT=0 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL="$cred" git -C "$root" -c "safe.directory=$root" -c credential.interactive=false ls-remote origin "refs/heads/$b" 2>/dev/null | awk -v r="refs/heads/$b" '$2 == r { print $1; exit }')
+        rm -f "$cred"
+      fi
+      case "$up" in ''|*[!0-9a-f]*) ;; *) want=$(GIT_NO_REPLACE_OBJECTS=1 git -C "$root" rev-parse -q --verify "$up:$c" 2>/dev/null) ;; esac
+    fi
+    [ -n "$want" ] && [ "$want" = "$new" ] && cp "$s.new" "$p" 2>/dev/null && continue
     msg="${msg}that command changed $c, which switches the coddy guardrails, so it has been $what. "
   done
   [ -z "$msg" ] || msg="${msg}Settings change through /coddy:config; leaving the workflow is for the user to do by hand. "
   confpath
   # Only lines that are new count, so undoing a change never trips the wire.
   added=$(snap | LC_ALL=C sort | LC_ALL=C comm -13 "$file" - | sed 's/ [^ ]*$//' | tr '\n' ' ' | sed 's/ $//')
-  rm -f "$file"; [ -n "$keep" ] || rm -f "$file".*
+  rm -f "$file" "$file".*.new; [ -n "$keep" ] || rm -f "$file".*
   [ -n "$added" ] && msg="${msg}that command changed the main checkout: $added. Issue work belongs in .worktrees/<issue>/. Undo it."
   [ -z "$msg" ] && exit 0
   die "$msg"

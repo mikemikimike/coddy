@@ -155,6 +155,12 @@ t 0 "config: and left it at HEAD" same .coddy.yml
 tripped 2 "config: a change committed here in the same command trips" 'echo "guard: warn" >> .coddy.yml && git commit -qam warn'
 t 0 "config: and is restored" same .coddy.yml
 git reset -q --hard origin/main
+# A failed ask names no commit, so no local ref, a branch named none
+# included, can stand in for origin's tip.
+git checkout -q -b none && echo "guard: warn" >> .coddy.yml && git commit -qam forged && git checkout -q main
+tripped 2 "config: the changed config committed to a local branch named none trips, origin unreachable" 'echo "guard: warn" >> .coddy.yml && git remote set-url origin "$tmp/gone.git"'
+t 0 "config: and is restored" same .coddy.yml
+git remote set-url origin "$tmp/origin.git"; git branch -qD none >/dev/null; git checkout -q -- .coddy.yml
 # A replace object can map the tip's tree to the changed config, so the tip
 # is read with replace objects ignored.
 tip=$(git rev-parse HEAD)
@@ -173,24 +179,46 @@ t 0 "config: and is restored" same .coddy.yml
 git reset -q --hard origin/main
 # A url.<forged>.insteadOf in the global git config would send ls-remote to
 # a remote of the command's own in origin's name, so origin is asked with
-# system and global git config ignored, their credential.* keys alone passed
-# back as -c, in order and whole, and safe.directory set to the root. A spy
-# git records what the ls-remote was given.
+# system and global git config ignored, their credential.* keys alone carried
+# in a config file standing in for the global one, in order and whole (a
+# subsection holding or starting with = included, which -c could not carry),
+# and safe.directory set to the root. A spy git records what the ls-remote
+# was given, that file included.
 git init -q --bare "$tmp/forged.git"
-printf '[url "%s"]\n\tinsteadOf = %s\n[credential]\n\thelper = \n\thelper = "!f() { echo username=x; echo password=y; }; f"\n[credential "https://example.com"]\n\tuseHttpPath\n' "$tmp/forged.git" "$tmp/origin.git" > "$tmp/gitconfig"
+printf '[url "%s"]\n\tinsteadOf = %s\n[credential]\n\thelper = \n\thelper = "!f() { echo username=x; echo password=y; }; f"\n[credential "=x"]\n\thelper = y\n[credential "a=b"]\n\thelper = h1\n[credential "https://example.com"]\n\tuseHttpPath\n' "$tmp/forged.git" "$tmp/origin.git" > "$tmp/gitconfig"
 mkdir "$tmp/spy"; cat > "$tmp/spy/git" <<EOF
 #!/bin/sh
-case " \$* " in *" ls-remote "*) printf '%s\n' "\$@" > "$tmp/spy.log" ;; esac
+case " \$* " in *" ls-remote "*) printf '%s\n' "\$@" > "$tmp/spy.log"; cat "\${GIT_CONFIG_GLOBAL:-/dev/null}" > "$tmp/spy.cfg" ;; esac
 exec "$(command -v git)" "\$@"
 EOF
 chmod +x "$tmp/spy/git"
 PATH="$tmp/spy:$PATH" GIT_CONFIG_GLOBAL="$tmp/gitconfig" report "config: a change pushed to a remote a global insteadOf passes off as origin trips" 'echo "guard: warn" >> .coddy.yml && git commit -qam warn && git push -q "$tmp/forged.git" HEAD:main'
 t 0 "config: and that report names the file" grep -q 'changed .coddy.yml' <<<"$out"
 t 0 "config: and is restored" same .coddy.yml
-t 0 "config: ls-remote got the global credential keys as -c, in order and whole" sh -c "tr '\n' ' ' < '$tmp/spy.log' | grep -qF -- '-c credential.helper= -c credential.helper=!f() { echo username=x; echo password=y; }; f -c credential.https://example.com.usehttppath '"
-t 1 "config: and nothing else from that config" grep -qi insteadof "$tmp/spy.log"
+t 0 "config: ls-remote got the global credential keys in its global config file, in order and whole" sh -c "tr '\n\t' '  ' < '$tmp/spy.cfg' | tr -s ' ' | grep -qF -- 'helper = helper = \"!f() { echo username=x; echo password=y; }; f\" [credential \"=x\"] helper = y [credential \"a=b\"] helper = h1 [credential \"https://example.com\"] usehttppath = true'"
+t 1 "config: and nothing else from that config" sh -c "cat '$tmp/spy.log' '$tmp/spy.cfg' | grep -qi insteadof"
 t 0 "config: with safe.directory set to the root" grep -qFx -- "safe.directory=$repo" "$tmp/spy.log"
+t 0 "config: and helpers told not to prompt" grep -qFx -- "credential.interactive=false" "$tmp/spy.log"
 git reset -q --hard origin/main
+# git reads ~/.gitconfig and $XDG_CONFIG_HOME/git/config both; so does trip.
+mkdir -p "$tmp/home" "$tmp/xdg/git"; printf '[credential]\n\thelper = home\n' > "$tmp/home/.gitconfig"; printf '[credential]\n\thelper = xdg\n' > "$tmp/xdg/git/config"
+PATH="$tmp/spy:$PATH" HOME="$tmp/home" XDG_CONFIG_HOME="$tmp/xdg" report "config: a change trips with the global config split over two files" 'echo "guard: warn" >> .coddy.yml'
+t 0 "config: and is restored" same .coddy.yml
+t 0 "config: ls-remote got the helper from each" sh -c "grep -q 'helper = xdg' '$tmp/spy.cfg' && grep -q 'helper = home' '$tmp/spy.cfg'"
+# The config is put back before origin is asked, so a trip cut short while
+# asking (a slow helper, the hook's timeout) leaves the restored one in place.
+mkdir "$tmp/slow"; cat > "$tmp/slow/git" <<EOF
+#!/bin/sh
+case " \$* " in *" ls-remote "*) echo \$\$ > "$tmp/asking"; sleep 20 ;; esac
+exec "$(command -v git)" "\$@"
+EOF
+chmod +x "$tmp/slow/git"
+wire snap w; echo "guard: warn" >> .coddy.yml
+printf '{"tool_use_id":"w"}' | PATH="$tmp/slow:$PATH" "$here/bin/coddy" trip >/dev/null 2>&1 & tp=$!
+i=0; while [ ! -s "$tmp/asking" ] && [ $i -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+kill $tp "$(cat "$tmp/asking" 2>/dev/null)" 2>/dev/null; wait $tp 2>/dev/null
+t 0 "config: a trip cut short while asking origin leaves the restored config in place" same .coddy.yml
+rm -f "$snapfile" "$snapfile".*; git checkout -q -- .coddy.yml
 # refs/remotes/origin/main is the command's to write, so trip asks origin
 # itself, once, when the config changed, and moves no ref: a committed warn
 # config passed off as pulled through that ref is put back, the ref left as
@@ -205,6 +233,10 @@ upstream() { (cd "$tmp/mate" && echo "$1" >> .coddy.yml && git commit -q -am up 
 upstream 'roadmap: Y.md'
 tripped 0 "config: a pulled change stands" 'git fetch -q origin && git merge -q --ff-only origin/main'
 t 0 "config: and is kept" grep -q '^roadmap: Y.md$' .coddy.yml
+upstream 'roadmap: Y2.md'
+printf '[credential "=x"]\n\thelper = y\n[credential "a=b"]\n\thelper = h1\n' > "$tmp/gitconfig2"
+GIT_CONFIG_GLOBAL="$tmp/gitconfig2" tripped 0 "config: a pulled change stands with a credential subsection holding = in the global config" 'git fetch -q origin && git merge -q --ff-only origin/main'
+t 0 "config: and is kept" grep -q '^roadmap: Y2.md$' .coddy.yml
 tripped 2 "config: a checkout of an older commit with another config trips" 'git checkout -q HEAD~1'
 t 0 "config: and is restored" grep -q '^roadmap: Y.md$' .coddy.yml
 git checkout -q -f main
