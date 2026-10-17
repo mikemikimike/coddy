@@ -183,6 +183,29 @@ t 0 "snapshot: and the report names it" grep -q "$snapfile" <<<"$out"
 tripped 2 "snapshot: so does one that removes it with the config, .git/coddy left behind" 'rm -f "$snapfile" .coddy.yml'
 git checkout -q -- .coddy.yml
 tripped 2 "snapshot: so does one that removes its copy of the config" 'rm -f "$snapfile".*'
+# Each path's kind is recorded, present or not, so a lost copy is not read
+# as a path that was absent: a weakened legacy file planted next to the live
+# .coddy.yml is let go, and a command that then removed .coddy.yml with its
+# copy alone would leave the planted one live.
+kinds() { wire snap w && [ "$(cat "$snapfile..coddy.yml.kind")" = "$1" ] && [ "$(cat "$snapfile..claude_coddy.yml.kind")" = "$2" ]; }
+t 0 "snapshot: records .coddy.yml as a file and the legacy path absent" kinds file absent
+CODDY_AGENT_DIR=.claude tripped 0 "snapshot: a legacy file planted next to the live .coddy.yml is let go" 'echo "guard: warn" > .claude/coddy.yml'
+report "snapshot: removing .coddy.yml with its copy alone then trips" 'rm -f "$snapfile..coddy.yml" .coddy.yml'
+t 0 "snapshot: and the report names the snapshot" grep -q "$snapfile" <<<"$out"
+git checkout -q -- .coddy.yml; rm .claude/coddy.yml
+mv .coddy.yml .claude/coddy.yml
+t 0 "snapshot: records .coddy.yml absent and the legacy file" kinds absent file
+tripped 2 "snapshot: removing the legacy file's copy while it is the live one trips" 'rm -f "$snapfile..claude_coddy.yml"'
+mkdir .coddy.yml
+t 0 "snapshot: records a directory at .coddy.yml" kinds dir file
+tripped 0 "config: a directory at .coddy.yml from before the command is left alone" 'true'
+t 0 "config: and stands" test -d .coddy.yml
+rmdir .coddy.yml; mkfifo .coddy.yml
+t 0 "snapshot: records a FIFO at .coddy.yml" kinds fifo file
+rm .coddy.yml; ln -s nowhere .coddy.yml
+t 0 "snapshot: records a dangling link at .coddy.yml as other" kinds other file
+t 0 "snapshot: with its target" test "$(cat "$snapfile..coddy.yml.link")" = nowhere
+rm .coddy.yml; mv .claude/coddy.yml .coddy.yml
 mv .coddy.yml "$tmp/aside"
 tripped 0 "snapshot: quiet once the config is gone, .git/coddy kept" 'true'
 mv "$tmp/aside" .coddy.yml

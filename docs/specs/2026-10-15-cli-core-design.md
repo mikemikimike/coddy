@@ -6,7 +6,7 @@ Move coddy's mechanics into a `coddy` command with no Claude Code dependency, so
 
 ## Decisions
 
-- `selftest.sh` is not edited. It keeps calling `scripts/{issue,config,detect}.sh` with `CLAUDE_*` variables and `.claude/coddy.yml`, and passes.
+- `selftest.sh` is unchanged except the two pull-exemption assertions, which now expect a restore. It keeps calling `scripts/{issue,config,detect}.sh` with `CLAUDE_*` variables and `.claude/coddy.yml`, and passes.
 - `scripts/*.sh` stay as Claude shims, so `hooks/hooks.json` and every skill's `allowed-tools` stay byte-identical.
 - `.claude/coddy.yml` is a read fallback; projects move to `.coddy.yml` explicitly through `/coddy:config`, never from a hook.
 - `.coddy.yml` gets no Claude Code sensitive-file prompt, so `guard` asks the user on every Edit or Write of it.
@@ -70,7 +70,7 @@ The agent-dir rules in `guard` and `snap`, today written as `.claude/`:
 
 ## Tests
 
-- `scripts/selftest.sh`: unchanged, passes through the shims.
+- `scripts/selftest.sh`: unchanged except the two pull-exemption assertions, which now expect a restore; passes through the shims.
 - `scripts/selftest-core.sh` (new) calls `bin/coddy` with no `CLAUDE_*` set and covers:
   - root resolution from `CODDY_ROOT` and from `$PWD`;
   - a claim and push held to the owner through `CODDY_SESSION` and `CODDY_PID`;
@@ -79,7 +79,7 @@ The agent-dir rules in `guard` and `snap`, today written as `.claude/`:
   - the shadowing restore, plus the delete and change restores on `.coddy.yml`, a pull of a shared config among them;
   - no agent-dir rules without `CODDY_AGENT_DIR`;
   - `start` and `ship` (including `ship` stopping on a failing verify) next to their aliases.
-- `selftest.sh` does not call `selftest-core.sh`, so it stays literally unchanged. This repo's `verify` becomes `bash scripts/selftest.sh && bash scripts/selftest-core.sh && claude plugin validate .` through `/coddy:config`, and the Commands section of `CLAUDE.md` lists both tests.
+- `selftest.sh` does not call `selftest-core.sh`; it is unchanged except the two pull-exemption assertions, which now expect a restore. This repo's `verify` becomes `bash scripts/selftest.sh && bash scripts/selftest-core.sh && claude plugin validate .` through `/coddy:config`, and the Commands section of `CLAUDE.md` lists both tests.
 
 ## Docs
 

@@ -260,9 +260,14 @@ if [ "${1-}" = snap ] || [ "${1-}" = trip ]; then
   id=$(jq -r '.tool_use_id // empty' 2>/dev/null)
   case "$id" in ''|*[!A-Za-z0-9_-]*) id=shared ;; esac
   file="${TMPDIR:-/tmp}/coddy-snap-$(printf %s "$root" | cksum | cut -d' ' -f1)-$id"
+  # What is at path $1: file, absent, dir, fifo or other (a dangling link, a
+  # socket, a device).
+  kind() { if [ -f "$1" ]; then echo file; elif [ -d "$1" ]; then echo dir; elif [ -p "$1" ]; then echo fifo; elif [ -e "$1" ] || [ -L "$1" ]; then echo other; else echo absent; fi; }
   # Both config paths are kept, present or not: a .coddy.yml the command
-  # makes next to a live .claude/coddy.yml would shadow it. A config the
-  # user keeps as a link is kept as its content and its target.
+  # makes next to a live .claude/coddy.yml would shadow it. Each path's
+  # kind is recorded, with a copy of a file and the target of a link, so a
+  # record the command removed is told from a path that was absent. A
+  # config the user keeps as a link is kept as its content and its target.
   if [ "$1" = snap ]; then
     # A snapshot before every command, so trip can tell a command that
     # removed it from one run outside the workflow: NOT_ONBOARDED alone where
@@ -273,21 +278,27 @@ if [ "${1-}" = snap ] || [ "${1-}" = trip ]; then
     snap | LC_ALL=C sort > "$file"
     for c in .coddy.yml "$legacy"; do
       p="$root/$c" s="$file.${c//\//_}"
-      [ ! -f "$p" ] || cp "$p" "$s"; [ ! -L "$p" ] || readlink "$p" > "$s.link"
+      kind "$p" > "$s.kind"; [ ! -f "$p" ] || cp "$p" "$s"; [ ! -L "$p" ] || readlink "$p" > "$s.link"
     done
     exit 0
   fi
   code=2 msg="" keep=""
   # The snapshot says whether the project was onboarded when the command
   # started, so trip never looks at the config first: the command may have
-  # removed it, or made it. No snapshot, or one without its copy of the
-  # config, is one the command touched, and then what it did cannot be
-  # checked: rejected. Not onboarded then: quiet, the command that wrote
-  # the config included.
-  for c in .coddy.yml "$legacy"; do pre="$file.${c//\//_}"; [ ! -f "$pre" ] || break; done
-  [ -f "$file" ] && { [ -f "$pre" ] || grep -qx NOT_ONBOARDED "$file"; } ||
-    die "that command left no snapshot of the main checkout at $file, so what it changed cannot be checked: a command may not touch the snapshot. Undo what it did."
-  [ -f "$pre" ] || { rm -f "$file" "$file".*; exit 0; }
+  # removed it, or made it. No snapshot, or one missing a path's record, or
+  # the copy a file's record promises, is one the command touched, and then
+  # what it did cannot be checked: rejected. Not onboarded then: quiet, the
+  # command that wrote the config included. The live config as snap saw it
+  # is the first path recorded as a file.
+  lost="that command left no snapshot of the main checkout at $file, so what it changed cannot be checked: a command may not touch the snapshot. Undo what it did."
+  [ -f "$file" ] || die "$lost"
+  grep -qx NOT_ONBOARDED "$file" && { rm -f "$file" "$file".*; exit 0; }
+  pre=""
+  for c in .coddy.yml "$legacy"; do
+    s="$file.${c//\//_}"; k=""; [ ! -f "$s.kind" ] || k=$(cat "$s.kind")
+    case "$k" in file) [ -f "$s" ] && pre="${pre:-$s}" ;; absent|dir|fifo|other) ;; *) false ;; esac || die "$lost"
+  done
+  [ -n "$pre" ] || die "$lost"
   # The config is the off switch for every hook here, so a shell command may
   # not change it: each path that changed is put back as it was, whatever
   # the command did. A pull or checkout that brought another config is put
@@ -308,10 +319,11 @@ if [ "${1-}" = snap ] || [ "${1-}" = trip ]; then
   for c in .coddy.yml "$legacy"; do
     p="$root/$c" s="$file.${c//\//_}"
     { [ "$c" = "$legacy" ] && [ -f "$root/.coddy.yml" ]; } && continue
-    # Unchanged: the same link target (none for a plain file) and the same
-    # content, or absent before and after.
+    # Unchanged: the same link target (none for a plain file), the same kind
+    # and, for a file, the same content.
     was=""; [ ! -f "$s.link" ] || was=$(cat "$s.link")
-    [ "$(readlink "$p" 2>/dev/null)" = "$was" ] && { { [ -f "$p" ] && [ -f "$s" ] && cmp -s "$p" "$s"; } || { [ ! -e "$p" ] && [ ! -f "$s" ]; }; } && continue
+    k=""; [ ! -f "$s.kind" ] || k=$(cat "$s.kind")
+    [ "$(readlink "$p" 2>/dev/null)" = "$was" ] && [ "$(kind "$p")" = "$k" ] && { [ "$k" != file ] || cmp -s "$p" "$s"; } && continue
     rm -rf "$p"
     # A copy that cannot be written back is kept, and the report says so,
     # rather than claiming the file is back.
