@@ -37,7 +37,7 @@ A skill counts as installed when it is listed for this session. A missing one is
 
 | Intent | A skill whose description says it … | Otherwise |
 |---|---|---|
-| Interview the ticket (interactive: `start` step 6 only, never inside a brief) | brainstorms, interviews or sharpens a ticket or design before implementation | Ask in rounds until nothing is open: gaps, contradictions, silent assumptions, two or three approaches with a recommendation, acceptance criteria as observable checks. |
+| Interview the ticket (interactive: `start` step 6 only, never inside a brief) | brainstorms, plans, interviews or sharpens a ticket or design before implementation | Ask in rounds until nothing is open: gaps, contradictions, silent assumptions, two or three approaches with a recommendation, acceptance criteria as observable checks. |
 | Simplest solution first | forces the simplest or most minimal solution that works | State the smallest change that meets the acceptance criteria; add only what a criterion needs. |
 | Test-first | drives a change by writing the failing test first | Write the failing test before the code wherever the project tests that code. |
 | Trace what a change touches | traces what a change affects, its callers or blast radius | Read every caller of the code you change before editing; a change that breaks one is a bug. |
