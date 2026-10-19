@@ -58,6 +58,17 @@ rm AGENTS.md; ln -s README.md AGENTS.md; t 0 "detect: a link to a file at AGENTS
 rm AGENTS.md; ln -s nowhere AGENTS.md; t 0 "detect: a dangling link at AGENTS.md" says '^agents_md: symlink$' run detect
 rm AGENTS.md; mkdir AGENTS.md; t 0 "detect: a directory at AGENTS.md" says '^agents_md: dir$' run detect
 rmdir AGENTS.md
+# What is at the PR check's path, the same way: a link at .github, at
+# .github/workflows or at the workflow itself reads as symlink.
+w=.github/workflows/coddy.yml
+t 0 "detect: no PR check" says '^pr_check: none$' run detect
+mkdir -p .github/workflows; : > $w; t 0 "detect: a plain PR check" says '^pr_check: present$' run detect
+rm $w; ln -s ../../README.md $w; t 0 "detect: a link to a file at the PR check" says '^pr_check: symlink$' run detect
+rm $w; ln -s nowhere $w; t 0 "detect: a dangling link at the PR check" says '^pr_check: symlink$' run detect
+rm $w; mkdir $w; t 0 "detect: a directory at the PR check" says '^pr_check: dir$' run detect
+rmdir $w; rmdir .github/workflows; ln -s . .github/workflows; t 0 "detect: a link at .github/workflows" says '^pr_check: symlink$' run detect
+rm -r .github; ln -s sub .github; t 0 "detect: a link at .github" says '^pr_check: symlink$' run detect
+rm .github
 # Where this runs and what installs here, for onboard's install commands.
 case "$(uname -s)" in Darwin) os=macos ;; Linux) os=linux ;; *) os=unknown ;; esac
 t 0 "detect: os names the platform" says "^os: $os$" run detect

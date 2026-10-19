@@ -85,11 +85,15 @@ if [ "${1-}" = detect ]; then
   echo "pkg: $p"
   b=$( (git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || echo origin/main) | sed 's#^origin/##')
   echo "default_branch: $b"
-  echo "pr_check: $([ -f .github/workflows/coddy.yml ] && echo present || echo none)"
   # A link at AGENTS.md, to a file or dangling, reads as symlink before kind
   # would read through it: onboard writes its block into a plain file alone,
   # since no hook is live before the config and a write through a link lands
-  # wherever it points.
+  # wherever it points. The PR check's path the same way, a link at .github
+  # or .github/workflows included; a plain file is present, nothing is none.
+  w=.github/workflows/coddy.yml
+  c=$( { [ -L .github ] || [ -L .github/workflows ] || [ -L "$w" ]; } && echo symlink || kind "$w")
+  case "$c" in file) c=present ;; absent) c=none ;; esac
+  echo "pr_check: $c"
   echo "agents_md: $([ -L AGENTS.md ] && echo symlink || kind AGENTS.md)"
   echo "make_targets: $(grep -ohE '^[A-Za-z][A-Za-z0-9_-]*:' Makefile 2>/dev/null | tr -d : | tr '\n' ' ')"
   echo "package_scripts: $(jq -r '.scripts // {} | keys | join(" ")' package.json 2>/dev/null)"
