@@ -59,7 +59,7 @@ echo note > notes.txt; : > empty.txt # untracked on purpose: jj must not make th
 t 1 "no skill disables model invocation" grep -rq disable-model-invocation "$here/skills"
 t 1 "no skill names a vendor skill" grep -rqE 'superpowers|code-review:' "$here/skills"
 t 0 "policy.md exists" test -f "$here/skills/start/references/policy.md"
-opens() { sed -n 3p "$1" | grep -qxF 'Read `policy.md` at the path you were given first; its rules apply here. No path given → this brief alone applies; never look for a policy file.'; }
+opens() { sed -n 3p "$1" | grep -qxF 'Read `policy.md` at the path you were given first; its rules apply here. No path given, or the file cannot be read → stop and return `no policy path`.'; }
 for b in implement harden review security; do t 0 "brief $b opens with policy.md" opens "$here/skills/start/$b.md"; done
 # The config schema has three copies. yamlkeys reads the yaml block under a
 # "## Config" heading (README comments out its jira lines, so a leading "# "

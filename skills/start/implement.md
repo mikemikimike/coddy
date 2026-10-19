@@ -1,6 +1,6 @@
 # Implement
 
-Read `policy.md` at the path you were given first; its rules apply here. No path given → this brief alone applies; never look for a policy file.
+Read `policy.md` at the path you were given first; its rules apply here. No path given, or the file cannot be read → stop and return `no policy path`.
 
 You implement one issue in its own worktree. You do not talk to the user.
 

@@ -1,6 +1,6 @@
 # Security review
 
-Read `policy.md` at the path you were given first; its rules apply here. No path given → this brief alone applies; never look for a policy file.
+Read `policy.md` at the path you were given first; its rules apply here. No path given, or the file cannot be read → stop and return `no policy path`.
 
 Read-only: you do not edit, commit or talk to the user. You review one change for security flaws.
 
