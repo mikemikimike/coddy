@@ -78,6 +78,9 @@ PATH="$tmp/nojq" t 0 "detect: pkg is none with no package manager on PATH" says 
 t 0 "guard allows everything before onboarding" guard "$repo/README.md"
 t 0 "guard asks nothing for .coddy.yml before onboarding" test -z "$(guard "$repo/.coddy.yml")"
 t 2 "trip without a snapshot trips before onboarding too: snap writes one before every command" wire trip none
+# onboard installs jq inside one shell command, so snap runs without it and
+# trip with it: the snapshot's name must not depend on jq.
+PATH="$tmp/nojq" wire snap w; t 0 "before onboarding: snap without jq and trip with it name the same snapshot" wire trip w
 tripped 0 "before onboarding: a shell write to the main checkout is quiet" 'echo x > stray.txt'; rm stray.txt
 t 1 "before onboarding: snap made nothing under .git" test -e .git/coddy
 

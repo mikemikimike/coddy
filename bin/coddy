@@ -276,8 +276,11 @@ snap() {
 
 if [ "${1-}" = snap ] || [ "${1-}" = trip ]; then
   # The snapshot is named by the tool use; an id that is not a plain word
-  # reads as none, so it cannot name a path outside TMPDIR.
-  id=$(jq -r '.tool_use_id // empty' 2>/dev/null)
+  # reads as none, so it cannot name a path outside TMPDIR. Read without jq:
+  # onboard installs jq inside one command, so snap runs without it and trip
+  # with it, and the name must come out the same on both sides. Inside a JSON
+  # string a quote is escaped, so a bare "tool_use_id" is a key, never text.
+  id=$(sed -n 's/.*"tool_use_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' 2>/dev/null | head -n1)
   case "$id" in ''|*[!A-Za-z0-9_-]*) id=shared ;; esac
   file="${TMPDIR:-/tmp}/coddy-snap-$(printf %s "$root" | cksum | cut -d' ' -f1)-$id"
   # Both config paths are kept, present or not: a .coddy.yml the command
