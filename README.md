@@ -48,7 +48,9 @@ You also need:
 - `jq`. The edit guard needs it and blocks every edit without it.
 - `jj` ([Jujutsu](https://jj-vcs.github.io)), unless you pick `worktree: git`
   at onboarding. `/coddy:onboard` installs either one that is missing
-  (Homebrew, apt, dnf or winget) through a shell command you allow.
+  (Homebrew, apt-get, dnf or winget) through a shell command you allow;
+  `jj` has no apt-get package, so there it names the install page and
+  recommends `worktree: git`.
 - For GitHub Issues: the GitHub plugin, enabled and signed in with a token
   that can read and write the repository's issues and pull requests.
 - For Jira: the Atlassian plugin.
