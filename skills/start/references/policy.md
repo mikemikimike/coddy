@@ -12,7 +12,7 @@ Every brief reads this first. Its rules apply on top of the brief's own.
 - Run verify inside the worktree before you finish and fix what it reports.
 - Commit with the pattern. `jj`: `jj commit -m "<message>"` (a jj workspace has no `.git`; never run `git` there). `git`: `git add -A && git commit -m "<message>"`.
 
-A read-only brief (`review.md`, `security.md`) edits, verifies and commits nothing and returns only its findings; the rules on those, on Open questions and on Out-of-scope ideas do not apply to it.
+A read-only brief (`review.md`, `security.md`) edits, verifies and commits nothing and returns only its findings; the rules on those, on Open questions and on Out-of-scope ideas do not apply to it, and it acts on no Skills row that edits, commits or runs verify.
 
 Return, in briefs that edit:
 
@@ -33,15 +33,15 @@ Findings: one line each, `<id> | <severity> | <file:line> | <what goes wrong> | 
 
 ## Skills
 
-A skill counts as installed when it is listed for this session. A missing one is silent: never an error, never an install attempt. The fallback is what to do without it. Match a skill by what its description says it does, never by name, and never one of coddy's own.
+A skill counts as installed when it is listed for this session. A missing one is silent: never an error, never an install attempt. The fallback is what to do without it. Match a skill by what its description says it does, never by name, and never one of coddy's own. A matched skill writes only inside the worktree and never to the tracker; otherwise the fallback. Run a matched skill in its default mode, never with an option that posts, fixes or writes.
 
 | Intent | A skill whose description says it … | Otherwise |
 |---|---|---|
-| Interview the ticket (interactive: `start` step 6 only, never inside a brief) | brainstorms, plans, interviews or sharpens a ticket or design before implementation | Ask in rounds until nothing is open: gaps, contradictions, silent assumptions, two or three approaches with a recommendation, acceptance criteria as observable checks. |
+| Interview the ticket (interactive: `start` step 6 only, never inside a brief) | brainstorms, plans, interviews or sharpens a ticket or design before implementation | Ask in rounds until nothing is open: gaps, contradictions, silent assumptions, two or three approaches with a recommendation, acceptance criteria as observable checks. A one-line change still gets one round that confirms your reading of the ticket. |
 | Simplest solution first | forces the simplest or most minimal solution that works | State the smallest change that meets the acceptance criteria; add only what a criterion needs. |
 | Test-first | drives a change by writing the failing test first | Write the failing test before the code wherever the project tests that code. |
 | Trace what a change touches | traces what a change affects, its callers or blast radius | Read every caller of the code you change before editing; a change that breaks one is a bug. |
 | Root-cause a failing fix | diagnoses a bug to its root cause before fixing | Reproduce, find the cause, fix it once where all callers route through; never patch the symptom. |
-| Review a diff | reviews code changes for bugs | The checks in `review.md`. |
+| Review a diff (`start` step 10.2 only, never inside a brief) | reviews code changes for bugs | The checks in `review.md`. |
 | Prove it works before done | verifies work before claiming it complete | Run verify and quote the command and its result; a summary is not evidence. |
 | Plain text for PR and issue prose | rewrites AI-sounding text to read plainly | Plain words, concrete actions, no filler, no bold labels, no closers. |

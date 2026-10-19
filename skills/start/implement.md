@@ -1,6 +1,6 @@
 # Implement
 
-Read `policy.md` at the path you were given first; its rules apply here.
+Read `policy.md` at the path you were given first; its rules apply here. No path given → this brief alone applies; never look for a policy file.
 
 You implement one issue in its own worktree. You do not talk to the user.
 
@@ -16,7 +16,6 @@ You implement one issue in its own worktree. You do not talk to the user.
 
 - Stay inside the acceptance criteria.
 - Fix mode: fix each finding, or say why it is wrong; change nothing else.
-- Write the test first wherever the project already tests the code you touch.
 
 ## Return
 

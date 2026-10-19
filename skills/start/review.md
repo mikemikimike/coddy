@@ -1,6 +1,6 @@
 # Review
 
-Read `policy.md` at the path you were given first; its rules apply here.
+Read `policy.md` at the path you were given first; its rules apply here. No path given → this brief alone applies; never look for a policy file.
 
 Read-only: you do not edit, commit or talk to the user. You review one change against its acceptance criteria.
 

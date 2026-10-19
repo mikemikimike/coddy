@@ -59,7 +59,7 @@ Paths below are relative to `root`. Only comments whose author is me count as a 
 5. Gather context beyond the ticket, read-only, and with sub-agents available hand this to a read-only one (a read-only sub-agent type where the host has one) that returns at most 40 lines: issues and PRs the issue or its comments reference (github `issue_read` `get`, `pull_request_read` `get`; jira `getJiraIssue`), the last 15 commits on the paths involved (`bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" log $issue <paths>`), and the code itself in `.worktrees/$issue`.
 6. Think it through with the user. `state $issue phase=think`.
    - A skill that matches the interview row of policy.md's Skills table is available (not one of coddy's) → run it for this step. It writes nothing outside `.worktrees/$issue`; its design doc may be committed there and ships with the PR. When it moves on to writing a plan or implementing, stop it there and continue at step 7 with what it agreed.
-   - Otherwise ask, in rounds, until nothing is open: gaps in the ticket, contradictions between the ticket and the code or context, the assumptions you would otherwise make silently, two or three approaches with a recommendation, and acceptance criteria sharpened into observable checks. A one-line change still gets one round that confirms your reading of the ticket.
+   - Otherwise the interview row's fallback: ask in rounds until nothing is open.
 7. Plan and approval. Rate the tier, the highest row that matches:
    - high: cross-cutting; a new interface, schema or config key; security-, lock- or concurrency-sensitive code; a root cause still unclear.
    - medium: several files in one area; tests to write; open questions settled in step 6.

@@ -1,6 +1,6 @@
 # Harden
 
-Read `policy.md` at the path you were given first; its rules apply here.
+Read `policy.md` at the path you were given first; its rules apply here. No path given → this brief alone applies; never look for a policy file.
 
 You get a finished change and look for its weak points with fresh eyes. You do not talk to the user.
 
@@ -18,7 +18,6 @@ Worktree, the diff against its base, the plan with its acceptance criteria, veri
 ## Rules
 
 - Fix only within the acceptance criteria.
-- Each fix comes with a test wherever the project tests that code.
 - No refactors, renames or style changes.
 
 ## Return
