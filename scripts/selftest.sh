@@ -100,6 +100,11 @@ t 0 "onboard saves its answers under the agent dir" grep -qF '.claude/coddy/onbo
 t 0 "onboard backs up what it replaces under the agent dir" grep -qF '.claude/coddy/backup/' "$here/skills/onboard/SKILL.md"
 t 0 "onboard stops on an existing config and names /coddy:config" sh -c "grep -F 'config: present' '$here/skills/onboard/SKILL.md' | grep -qF '/coddy:config'"
 t 1 "onboard carries no install command for gh" grep -qiE 'install (-y )?(gh|github\.cli)( |$|`)' "$here/skills/onboard/SKILL.md"
+# No hook is live during onboard, so its pre-approved shell is the core's
+# verbs alone: a wildcard in a rule is where rm's flags and operands go, and
+# a redirect or rm on .git/ or .claude/ prompts as a sensitive write anyway.
+t 1 "onboard's allowed-tools holds no wildcard, redirect or rm" sh -c "sed -n 's/^allowed-tools: //p' '$here/skills/onboard/SKILL.md' | grep -qE '\\*|>>|(^| |\\()rm '"
+for v in 'exclude answers' 'exclude config' 'forget answers'; do t 0 "onboard pre-approves issue.sh $v" grep -qF "Bash(bash \"\${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh\" $v)" "$here/skills/onboard/SKILL.md"; done
 for p in brew apt-get dnf winget; do t 0 "onboard names a jq install command for $p" grep -qE "$p"' install (-y )?(jq|jqlang\.jq)( |$|`)' "$here/skills/onboard/SKILL.md"; done
 t 0 "guard allows everything before onboarding" guard "$repo/README.md"
 t 0 "sweep is a quiet no-op before onboarding" run sweep
