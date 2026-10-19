@@ -58,6 +58,8 @@ echo note > notes.txt; : > empty.txt # untracked on purpose: jj must not make th
 
 t 1 "no skill disables model invocation" grep -rq disable-model-invocation "$here/skills"
 t 1 "no skill names a vendor skill" grep -rqE 'superpowers|code-review:' "$here/skills"
+t 0 "policy.md exists" test -f "$here/skills/start/references/policy.md"
+for b in implement harden review security; do t 0 "brief $b names policy.md" grep -q 'policy.md' "$here/skills/start/$b.md"; done
 # The config schema has three copies. yamlkeys reads the yaml block under a
 # "## Config" heading (README comments out its jira lines, so a leading "# "
 # is dropped), naming a nested key parent.child and leaving out a bare

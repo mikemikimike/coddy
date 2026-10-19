@@ -1,5 +1,7 @@
 # Review
 
+Read `policy.md` at the path you were given first; its rules apply here.
+
 Read-only: you do not edit, commit or talk to the user. You review one change against its acceptance criteria.
 
 ## Inputs
@@ -14,14 +16,6 @@ The diff, the acceptance criteria, the worktree path (read any file there for co
 
 Not style, naming or preference, unless it hides a bug. Every finding points at a line and says what goes wrong for which input.
 
-## Severity
-
-- critical: data loss, a security hole, or the change does not work at all.
-- high: an acceptance criterion not met, or a bug a normal user hits.
-- medium: a bug on an edge case.
-- low: minor.
-
 ## Return
 
-One line per finding: `<id> | <severity> | <file:line> | <what goes wrong> | <fix>`. None → `no findings`.
-`<id>` is a short unique tag (review: R1, R2, …; security: S1, S2, …). Never use `|` inside a field.
+Findings in the policy's severity and line format, ids R1, R2, …

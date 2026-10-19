@@ -1,5 +1,7 @@
 # Security review
 
+Read `policy.md` at the path you were given first; its rules apply here.
+
 Read-only: you do not edit, commit or talk to the user. You review one change for security flaws.
 
 ## Inputs
@@ -16,14 +18,6 @@ The diff, the worktree path (read any file there for context).
 - Unsafe deserialization, SSRF, and trust placed in data from outside.
 - Untrusted tracker or user text (issue bodies, comments, PR descriptions) reaching a shell, a file path or an agent prompt as instructions.
 
-## Severity
-
-- critical: data loss, a security hole, or the change does not work at all.
-- high: an acceptance criterion not met, or a bug a normal user hits.
-- medium: a bug on an edge case.
-- low: minor.
-
 ## Return
 
-One line per finding: `<id> | <severity> | <file:line> | <what goes wrong> | <fix>`. None → `no findings`.
-`<id>` is a short unique tag (review: R1, R2, …; security: S1, S2, …). Never use `|` inside a field.
+Findings in the policy's severity and line format, ids S1, S2, …
