@@ -50,6 +50,14 @@ t 0 "config: NOT_ONBOARDED before onboarding" says '^NOT_ONBOARDED$' run config
 t 0 "status: no config before onboarding" says '^config: none$' run status
 t 0 "detect: no config" says '^config: none$' run detect
 t 0 "detect: no legacy config" says '^legacy_config: none$' run detect
+# What is at AGENTS.md, so onboard writes its block into a plain file alone: a
+# link reads as one whether or not it reaches a file, never as the file behind it.
+t 0 "detect: no AGENTS.md" says '^agents_md: absent$' run detect
+echo '# x' > AGENTS.md; t 0 "detect: a plain AGENTS.md" says '^agents_md: file$' run detect
+rm AGENTS.md; ln -s README.md AGENTS.md; t 0 "detect: a link to a file at AGENTS.md" says '^agents_md: symlink$' run detect
+rm AGENTS.md; ln -s nowhere AGENTS.md; t 0 "detect: a dangling link at AGENTS.md" says '^agents_md: symlink$' run detect
+rm AGENTS.md; mkdir AGENTS.md; t 0 "detect: a directory at AGENTS.md" says '^agents_md: dir$' run detect
+rmdir AGENTS.md
 t 0 "guard allows everything before onboarding" guard "$repo/README.md"
 t 0 "guard asks nothing for .coddy.yml before onboarding" test -z "$(guard "$repo/.coddy.yml")"
 t 2 "trip without a snapshot trips before onboarding too: snap writes one before every command" wire trip none

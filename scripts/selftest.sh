@@ -73,6 +73,24 @@ schema() { [ "$(yamlkeys "$1")" = "$(bulletkeys "$2")" ] && [ "$(yamlkeys "$1")"
 t 0 "schema: onboard, config and README list the same keys" schema "$here/skills/onboard/SKILL.md" "$here/skills/config/SKILL.md" "$here/README.md"
 awk '{print} /^roadmap: /{print "extra: x"}' "$here/skills/onboard/SKILL.md" > "$tmp/onboard.md"
 t 1 "schema: a key added to one copy only fails it" schema "$tmp/onboard.md" "$here/skills/config/SKILL.md" "$here/README.md"
+# A skill that injects a script's output says what to do on a host that does
+# not inject or expand. fallback <skill> <verb> [vars]: its fallback line names
+# coddy <verb> for reading the sections by hand, `CLAUDE_PLUGIN_ROOT`
+# unexpanded as never a `bin/coddy` inside the project, and each variable the
+# skill takes. A new skill goes in the table.
+fallback() { line=$(grep -F '`CLAUDE_PLUGIN_ROOT` unexpanded' "$1") && for w in "coddy $2" 'never a `bin/coddy`' ${3-}; do case "$line" in *"$w"*) ;; *) return 1;; esac; done; }
+for s in 'config status $ARGUMENTS' 'next status' 'onboard detect' 'ship status $ARGUMENTS' 'start status $issue $onto $base' 'triage status $ARGUMENTS'; do read -r n v a <<< "$s"; t 0 "skill $n carries the fallback for a host that does not inject" fallback "$here/skills/$n/SKILL.md" "$v" "$a"; done
+grep -vF '`CLAUDE_PLUGIN_ROOT` unexpanded' "$here/skills/next/SKILL.md" > "$tmp/next.md"
+t 1 "a skill that injects without the fallback fails it" fallback "$tmp/next.md" status
+sed '/`CLAUDE_PLUGIN_ROOT` unexpanded/s/coddy status/coddy stat/' "$here/skills/next/SKILL.md" > "$tmp/next.md"
+t 1 "one whose fallback drops the read-by-hand command fails it" fallback "$tmp/next.md" status
+sed '/`CLAUDE_PLUGIN_ROOT` unexpanded/s|never a `bin/coddy`|never a copy|' "$here/skills/next/SKILL.md" > "$tmp/next.md"
+t 1 "one whose fallback drops the never-a-bin/coddy clause fails it" fallback "$tmp/next.md" status
+sed '/`CLAUDE_PLUGIN_ROOT` unexpanded/s/\$ARGUMENTS/$ARGS/' "$here/skills/triage/SKILL.md" > "$tmp/triage.md"
+t 1 "one whose fallback drops its variable fails it" fallback "$tmp/triage.md" status '$ARGUMENTS'
+t 1 "no skill carries the injection syntax inside a line, which Claude Code would run" grep -qE '.!`' "$here"/skills/*/SKILL.md
+t 0 "onboard names the AGENTS.md begin marker" grep -qF '<!-- coddy:begin -->' "$here/skills/onboard/SKILL.md"
+t 0 "onboard names the AGENTS.md end marker" grep -qF '<!-- coddy:end -->' "$here/skills/onboard/SKILL.md"
 t 0 "guard allows everything before onboarding" guard "$repo/README.md"
 t 0 "sweep is a quiet no-op before onboarding" run sweep
 

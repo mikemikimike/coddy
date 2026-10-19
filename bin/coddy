@@ -63,6 +63,11 @@ if [ "${1-}" = config ]; then
   if [ -f "$conf" ]; then cat "$conf"; else echo "NOT_ONBOARDED"; fi; exit 0
 fi
 
+# What is at path $1: file, absent, dir, fifo or other (a dangling link, a
+# socket, a device). A link to a file reads as file: the config lock compares
+# a link the user keeps through it.
+kind() { if [ -f "$1" ]; then echo file; elif [ -d "$1" ]; then echo dir; elif [ -p "$1" ]; then echo fifo; elif [ -e "$1" ] || [ -L "$1" ]; then echo other; else echo absent; fi; }
+
 # Facts about the project that onboarding uses to pre-fill the config so it
 # only asks about what it cannot infer. Read-only and never fails loudly.
 if [ "${1-}" = detect ]; then
@@ -75,6 +80,11 @@ if [ "${1-}" = detect ]; then
   b=$( (git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || echo origin/main) | sed 's#^origin/##')
   echo "default_branch: $b"
   echo "pr_check: $([ -f .github/workflows/coddy.yml ] && echo present || echo none)"
+  # A link at AGENTS.md, to a file or dangling, reads as symlink before kind
+  # would read through it: onboard writes its block into a plain file alone,
+  # since no hook is live before the config and a write through a link lands
+  # wherever it points.
+  echo "agents_md: $([ -L AGENTS.md ] && echo symlink || kind AGENTS.md)"
   echo "make_targets: $(grep -ohE '^[A-Za-z][A-Za-z0-9_-]*:' Makefile 2>/dev/null | tr -d : | tr '\n' ' ')"
   echo "package_scripts: $(jq -r '.scripts // {} | keys | join(" ")' package.json 2>/dev/null)"
   echo "go_modules: $(ls go.mod */go.mod 2>/dev/null | tr '\n' ' ')"
@@ -260,9 +270,6 @@ if [ "${1-}" = snap ] || [ "${1-}" = trip ]; then
   id=$(jq -r '.tool_use_id // empty' 2>/dev/null)
   case "$id" in ''|*[!A-Za-z0-9_-]*) id=shared ;; esac
   file="${TMPDIR:-/tmp}/coddy-snap-$(printf %s "$root" | cksum | cut -d' ' -f1)-$id"
-  # What is at path $1: file, absent, dir, fifo or other (a dangling link, a
-  # socket, a device).
-  kind() { if [ -f "$1" ]; then echo file; elif [ -d "$1" ]; then echo dir; elif [ -p "$1" ]; then echo fifo; elif [ -e "$1" ] || [ -L "$1" ]; then echo other; else echo absent; fi; }
   # Both config paths are kept, present or not: a .coddy.yml the command
   # makes next to a live .claude/coddy.yml would shadow it. Each path's
   # kind is recorded, with a copy of a file and the target of a link, so a
