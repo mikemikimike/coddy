@@ -77,6 +77,12 @@ if [ "${1-}" = detect ]; then
   echo "remote: $(git remote get-url origin 2>/dev/null || echo none)"
   echo "jj: $(command -v jj >/dev/null 2>&1 && echo installed || echo missing)"
   echo "jq: $(command -v jq >/dev/null 2>&1 && echo installed || echo missing)"
+  # Where this runs and the first package manager on PATH: onboard's install
+  # command for a missing jq or jj is keyed on pkg.
+  case "$(uname -s 2>/dev/null)" in Darwin) o=macos ;; Linux) o=linux ;; CYGWIN*|MINGW*|MSYS*|Windows_NT) o=windows ;; *) o=unknown ;; esac
+  echo "os: $o"
+  p=none; for x in brew apt-get dnf winget; do command -v "$x" >/dev/null 2>&1 && { p=$x; break; }; done
+  echo "pkg: $p"
   b=$( (git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || echo origin/main) | sed 's#^origin/##')
   echo "default_branch: $b"
   echo "pr_check: $([ -f .github/workflows/coddy.yml ] && echo present || echo none)"

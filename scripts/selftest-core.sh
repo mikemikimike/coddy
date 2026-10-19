@@ -58,6 +58,12 @@ rm AGENTS.md; ln -s README.md AGENTS.md; t 0 "detect: a link to a file at AGENTS
 rm AGENTS.md; ln -s nowhere AGENTS.md; t 0 "detect: a dangling link at AGENTS.md" says '^agents_md: symlink$' run detect
 rm AGENTS.md; mkdir AGENTS.md; t 0 "detect: a directory at AGENTS.md" says '^agents_md: dir$' run detect
 rmdir AGENTS.md
+# Where this runs and what installs here, for onboard's install commands.
+case "$(uname -s)" in Darwin) os=macos ;; Linux) os=linux ;; *) os=unknown ;; esac
+t 0 "detect: os names the platform" says "^os: $os$" run detect
+PATH="$tmp/nojq" t 0 "detect: os is unknown without uname" says '^os: unknown$' run detect
+t 0 "detect: pkg names one package manager or none" says '^pkg: [a-z-]*$' run detect
+PATH="$tmp/nojq" t 0 "detect: pkg is none with no package manager on PATH" says '^pkg: none$' run detect
 t 0 "guard allows everything before onboarding" guard "$repo/README.md"
 t 0 "guard asks nothing for .coddy.yml before onboarding" test -z "$(guard "$repo/.coddy.yml")"
 t 2 "trip without a snapshot trips before onboarding too: snap writes one before every command" wire trip none
