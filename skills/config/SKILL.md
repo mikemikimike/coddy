@@ -14,6 +14,8 @@ allowed-tools: Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/config.sh"), Bash(bash "
 ## Worktrees
 !`bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" status`
 
+A section above shows a `bash` command rather than its output → this host does not inject: run `coddy config` and `coddy status` and read their output as Current and Worktrees. `CLAUDE_PLUGIN_ROOT` unexpanded in a command → run `coddy <verb>` in its place (`issue.sh <verb>` → `coddy <verb>`, `config.sh` → `coddy config`).
+
 `NOT_ONBOARDED` → stop and say: run `/coddy:onboard` first.
 
 ## Keys

@@ -82,7 +82,7 @@ The next `next` or `start` sweeps up what the merge left behind.
 
 | Skill | What it does |
 |---|---|
-| `/coddy:onboard` | Detects the project, asks for what it can't infer, writes `.coddy.yml` |
+| `/coddy:onboard` | Detects the project, asks for what it can't infer, writes the coddy block into `AGENTS.md` and then `.coddy.yml` |
 | `/coddy:config [key=value ...]` | Shows `.coddy.yml`, or changes the keys you name; offers to move a config an earlier version wrote to `.claude/coddy.yml` |
 | `/coddy:next` | Recommends the next issue from the tracker and the roadmap, setting aside issues in progress, assigned to someone else, or claimed on this machine |
 | `/coddy:start <issue> [onto <base-issue>]` | Fetches the issue, claims it, moves it to In Progress and gives it its own worktree in `.worktrees/<issue>`. Then reads beyond the ticket, thinks the work through with you, and asks for one approval of the plan with its difficulty tier. On a yes it implements on that tier's model, hardens the result twice, and loops code and security review until nothing at `review_block` or above is left (at most `review_rounds` rounds). Run it again to resume. Name a PR or branch, or let the issue's open PR be found: that branch instead. `onto` starts from another issue's branch instead of the default branch |

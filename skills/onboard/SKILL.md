@@ -10,6 +10,8 @@ allowed-tools: Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/detect.sh"), mcp__plugin
 ## Detected
 !`bash "${CLAUDE_PLUGIN_ROOT}/scripts/detect.sh"`
 
+Detected shows a `bash` command rather than its output → this host does not inject: run `coddy detect` and read its output as Detected. `CLAUDE_PLUGIN_ROOT` unexpanded in a command → it is the coddy plugin's directory, the one `bin/coddy` is in; `detect.sh` there is `coddy detect`.
+
 `jq: missing` → stop before asking anything and write nothing: the edit guard blocks every edit without it. `brew install jq` or `apt install jq`, then run `/coddy:onboard` again.
 `remote` is on GitHub → `get_me`. The tool is not available or fails → stop and write nothing: the GitHub plugin must be enabled and signed in with a token that can read and write the repository's issues and pull requests, then run `/coddy:onboard` again.
 
@@ -40,9 +42,24 @@ review_rounds: 3             # optional; 1-5 (default 3); review rounds before s
 2. Pre-fill from the detection block: `tracker`/`repo` from the remote, `branch`/`commit` from recent branches and commits when a pattern is visible, `verify` from make targets or package scripts, `roadmap` from the detected file.
 3. Ask for the rest in ONE AskUserQuestion call: every key you could not infer, plus confirmation of the guessed patterns, plus the `worktree` tool with `jj` as the default first option and `git` as the other (`jj: missing` → say so in the `jj` option). Also `tiers` for the agent running this skill only, keyed by its lower-case name (`claude`, `codex`, `gemini`, `cursor`, `copilot`): one option with its own cheap, default and strongest models as low, medium and high (Claude Code: `haiku`, `sonnet`, `opus`), marked recommended. `review_block` and `review_rounds` are not asked for: leave them out, their defaults apply. A non-GitHub remote means asking for the tracker; `tracker: jira` means asking for site and project key. `guard` is not asked for: leave it out, `/coddy:config` sets it later. `tracker: github` → also ask whether `default_branch` already requires a pull request (a branch rule or ruleset; nothing here can read it), so that nothing reaches it without one, even from a shell. `tracker: github` and `pr_check: none` → also ask whether to add coddy's PR check workflow, which fails every pull request that does not close an open, assigned issue.
 4. PR check accepted → `config: present` → the hooks are live and the tripwire would report the copy, so print `mkdir -p .github/workflows && cp "${CLAUDE_PLUGIN_ROOT}/templates/coddy.yml" .github/workflows/coddy.yml` for the user to run in their own terminal. `config: none` → run it yourself, before the config exists: the hooks go live with it. Say the file is uncommitted and to commit it; once the check is required, through a PR that closes an open, assigned issue, since the workflow runs from the PR's merge ref and checks that PR too.
-5. Write `.coddy.yml`. `legacy_config: present` → say `.claude/coddy.yml` is ignored from now on and can be removed.
-6. `config_ignored: no` → ask whether the config is personal (add `.coddy.yml` to `.git/info/exclude`) or shared (leave it for commit).
-7. `tracker: github` and `default_branch` does not yet require a pull request (step 3) → no MCP tool reads or writes branch protection, so say what to set by hand at `https://github.com/<repo>/settings/branches`: a rule for `<default_branch>` that requires a pull request before merging (0 approvals is enough) and applies to administrators, plus, when the PR check is accepted or `pr_check: present`, the required status check `closes a claimed issue`. `tracker: github`, PR check accepted or present, and the branch already required a pull request → say in one line that the workflow blocks a merge only once `closes a claimed issue` is a required check under that rule, and to add it there by hand. `tracker: jira` and `pr_check: present` → say the workflow fails every Jira PR (no closing reference) and to remove it.
-8. Print the final config and stop.
+5. `AGENTS.md` at the root, before the config, whether the config will be personal or shared: the block below, verbatim. Both markers present → replace what is between them, the rest of the file as it was; absent → append the block; no file → create it with the block alone. `config: present` → the guard rejects every write at the root once `.coddy.yml` exists, so print the block and say to put it there by hand, in place of the one between the markers.
 
-This skill changes nothing else: no code, no CI beyond `.github/workflows/coddy.yml`, no CLAUDE.md or planning docs.
+   ```markdown
+   <!-- coddy:begin -->
+   ## coddy
+
+   This repository uses [coddy](https://github.com/mnsami/coddy): every change is tied to a claimed issue, lives in its own worktree and lands through a pull request.
+
+   - Never edit the main checkout. Issue work happens only in `.worktrees/<issue>`, which the `start` skill creates once it has claimed the issue.
+   - Before acting, run `coddy config` and `coddy status`: the config (or `NOT_ONBOARDED`), then the root and the claimed worktrees.
+   - Ship only through the `ship` skill: it runs verify, commits, pushes and opens the pull request. Never merge.
+   - The skills (`onboard`, `config`, `next`, `start`, `ship`, `triage`) come from the coddy plugin, `skills/<name>/SKILL.md`, and `coddy` is its `bin/coddy`.
+   <!-- coddy:end -->
+   ```
+
+6. Write `.coddy.yml`. `legacy_config: present` → say `.claude/coddy.yml` is ignored from now on and can be removed.
+7. `config_ignored: no` → ask whether the config is personal (add `.coddy.yml` to `.git/info/exclude`) or shared (leave it for commit).
+8. `tracker: github` and `default_branch` does not yet require a pull request (step 3) → no MCP tool reads or writes branch protection, so say what to set by hand at `https://github.com/<repo>/settings/branches`: a rule for `<default_branch>` that requires a pull request before merging (0 approvals is enough) and applies to administrators, plus, when the PR check is accepted or `pr_check: present`, the required status check `closes a claimed issue`. `tracker: github`, PR check accepted or present, and the branch already required a pull request → say in one line that the workflow blocks a merge only once `closes a claimed issue` is a required check under that rule, and to add it there by hand. `tracker: jira` and `pr_check: present` → say the workflow fails every Jira PR (no closing reference) and to remove it.
+9. Print the final config, say `AGENTS.md` changed and is uncommitted, and stop.
+
+This skill changes nothing else: no code, no CI beyond `.github/workflows/coddy.yml`, nothing in `AGENTS.md` outside the markers, no CLAUDE.md or planning docs.

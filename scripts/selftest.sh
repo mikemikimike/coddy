@@ -73,6 +73,14 @@ schema() { [ "$(yamlkeys "$1")" = "$(bulletkeys "$2")" ] && [ "$(yamlkeys "$1")"
 t 0 "schema: onboard, config and README list the same keys" schema "$here/skills/onboard/SKILL.md" "$here/skills/config/SKILL.md" "$here/README.md"
 awk '{print} /^roadmap: /{print "extra: x"}' "$here/skills/onboard/SKILL.md" > "$tmp/onboard.md"
 t 1 "schema: a key added to one copy only fails it" schema "$tmp/onboard.md" "$here/skills/config/SKILL.md" "$here/README.md"
+# A skill that injects a script's output says what to do on a host that does
+# not inject or expand: the fallback line names the unexpanded variable.
+fallback() { ! grep -q '^!`' "$1" || grep -qF '`CLAUDE_PLUGIN_ROOT` unexpanded' "$1"; }
+for s in "$here"/skills/*/SKILL.md; do t 0 "skill $(basename "$(dirname "$s")") carries the fallback for a host that does not inject" fallback "$s"; done
+grep -vF '`CLAUDE_PLUGIN_ROOT` unexpanded' "$here/skills/next/SKILL.md" > "$tmp/next.md"
+t 1 "a skill that injects without the fallback fails it" fallback "$tmp/next.md"
+t 0 "onboard names the AGENTS.md begin marker" grep -qF '<!-- coddy:begin -->' "$here/skills/onboard/SKILL.md"
+t 0 "onboard names the AGENTS.md end marker" grep -qF '<!-- coddy:end -->' "$here/skills/onboard/SKILL.md"
 t 0 "guard allows everything before onboarding" guard "$repo/README.md"
 t 0 "sweep is a quiet no-op before onboarding" run sweep
 
