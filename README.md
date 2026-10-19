@@ -71,7 +71,8 @@ own environment.
 ## Onboard a project
 
 Run `/coddy:onboard` inside the project. It detects what it can, asks for
-the rest, and writes `.coddy.yml` (see [Config](#config)). It also
+the rest, writes the coddy block into `AGENTS.md` (so an agent without the
+plugin reads the rules) and then `.coddy.yml` (see [Config](#config)). It also
 offers to copy the PR check workflow into the project, and tells you what to
 set by hand so the default branch requires a pull request.
 
