@@ -12,7 +12,7 @@ Every brief reads this first. Its rules apply on top of the brief's own.
 - Run verify inside the worktree before you finish and fix what it reports.
 - Commit with the pattern. `jj`: `jj commit -m "<message>"` (a jj workspace has no `.git`; never run `git` there). `git`: `git add -A && git commit -m "<message>"`.
 
-A read-only brief (`review.md`, `security.md`) edits, verifies and commits nothing; the rules on those do not apply to it.
+A read-only brief (`review.md`, `security.md`) edits, verifies and commits nothing and returns only its findings; the rules on those, on Open questions and on Out-of-scope ideas do not apply to it.
 
 Return, in briefs that edit:
 
@@ -33,7 +33,7 @@ Findings: one line each, `<id> | <severity> | <file:line> | <what goes wrong> | 
 
 ## Skills
 
-A skill counts as installed when it is listed for this session. A missing one is silent: never an error, never an install attempt. The fallback is what to do without it. Match a skill by what its description says it does, never by name.
+A skill counts as installed when it is listed for this session. A missing one is silent: never an error, never an install attempt. The fallback is what to do without it. Match a skill by what its description says it does, never by name, and never one of coddy's own.
 
 | Intent | A skill whose description says it … | Otherwise |
 |---|---|---|
