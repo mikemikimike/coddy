@@ -79,6 +79,7 @@ fallback() { ! grep -q '^!`' "$1" || grep -qF '`CLAUDE_PLUGIN_ROOT` unexpanded' 
 for s in "$here"/skills/*/SKILL.md; do t 0 "skill $(basename "$(dirname "$s")") carries the fallback for a host that does not inject" fallback "$s"; done
 grep -vF '`CLAUDE_PLUGIN_ROOT` unexpanded' "$here/skills/next/SKILL.md" > "$tmp/next.md"
 t 1 "a skill that injects without the fallback fails it" fallback "$tmp/next.md"
+t 1 "no skill carries the injection syntax inside a line, which Claude Code would run" grep -qE '.!`' "$here"/skills/*/SKILL.md
 t 0 "onboard names the AGENTS.md begin marker" grep -qF '<!-- coddy:begin -->' "$here/skills/onboard/SKILL.md"
 t 0 "onboard names the AGENTS.md end marker" grep -qF '<!-- coddy:end -->' "$here/skills/onboard/SKILL.md"
 t 0 "guard allows everything before onboarding" guard "$repo/README.md"
