@@ -72,6 +72,7 @@ kind() { if [ -f "$1" ]; then echo file; elif [ -d "$1" ]; then echo dir; elif [
 # only asks about what it cannot infer. Read-only and never fails loudly.
 if [ "${1-}" = detect ]; then
   cd "$root" || exit 0
+  echo "root: $root"
   echo "config: $([ -f "$conf" ] && echo present || echo none)"
   echo "legacy_config: $([ -f "$legacy" ] && echo present || echo none)"
   echo "remote: $(git remote get-url origin 2>/dev/null || echo none)"

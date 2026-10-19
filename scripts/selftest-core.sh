@@ -31,8 +31,8 @@ tripped() { wire snap w; (cd "$repo" && eval "$3") >/dev/null 2>&1; t "$1" "$2" 
 # report <name> <shell snippet>: as tripped, with trip's exit in $r and its report in $out
 report() { wire snap w; (cd "$repo" && eval "$2") >/dev/null 2>&1; out=$(wire trip w 2>&1); r=$?; t 0 "$1" test "$r" = 2; }
 snapfile="${TMPDIR:-/tmp}/coddy-snap-$(printf %s "$repo" | cksum | cut -d' ' -f1)-w"
-# rooted <dir> [VAR=value...]: status run from that directory prints the project root
-rooted() { d=$1; shift; (cd "$d" && env "$@" "$here/bin/coddy" status | grep -qx "root: $repo"); }
+# rooted <dir> [VAR=value...]: status (or $verb) run from that directory prints the project root
+rooted() { d=$1; shift; (cd "$d" && env "$@" "$here/bin/coddy" "${verb-status}" | grep -qx "root: $repo"); }
 # A PATH with everything the guard needs but jq.
 mkdir "$tmp/nojq"; for x in bash sh sed awk cat grep git cmp ps sort comm tr cut cksum mkdir cp rm head; do p=$(command -v "$x") && ln -s "$p" "$tmp/nojq/$x"; done
 
@@ -46,6 +46,10 @@ t 1 "the core reads no CLAUDE_ variable" grep -q CLAUDE_ "$here/bin/coddy"
 t 0 "root: from CODDY_ROOT" rooted /
 t 0 "root: from the working directory without CODDY_ROOT" rooted "$repo" -u CODDY_ROOT
 t 0 "root: from a subdirectory without CODDY_ROOT" rooted "$repo/sub" -u CODDY_ROOT
+# onboard writes every path under the root, so detect prints it as status does:
+# a session opened in a subdirectory would otherwise write there.
+verb=detect t 0 "detect: root, as status prints it" rooted /
+verb=detect t 0 "detect: root from a subdirectory without CODDY_ROOT" rooted "$repo/sub" -u CODDY_ROOT
 t 0 "config: NOT_ONBOARDED before onboarding" says '^NOT_ONBOARDED$' run config
 t 0 "status: no config before onboarding" says '^config: none$' run status
 t 0 "detect: no config" says '^config: none$' run detect

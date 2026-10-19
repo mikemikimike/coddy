@@ -460,6 +460,7 @@ rooted() (
   bash "$here/scripts/issue.sh" status | grep -qx "root: $repo" || exit 1
   bash "$here/scripts/config.sh" | grep -q '^tracker:' || exit 1
   bash "$here/scripts/detect.sh" | grep -qx 'config: present' || exit 1
+  bash "$here/scripts/detect.sh" | grep -qx "root: $repo" || exit 1
   printf '{"tool_input":{"file_path":"%s"}}' "$repo/README.md" | bash "$here/scripts/issue.sh" guard
   [ $? = 2 ]
 )
