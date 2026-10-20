@@ -44,13 +44,14 @@ set -u
 # The install this runs from, needing no project: its real directory, through
 # a PATH link or a shim that sources it; get.sh's when that is CODDY_HOME.
 if [ "${1-}" = doctor ]; then
-  p="${BASH_SOURCE[0]}" i=0
+  p="${BASH_SOURCE[0]-}" i=0
+  [ -n "$p" ] || { echo "coddy: doctor needs to run from its file, not stdin" >&2; exit 1; }
   case "$p" in */*) ;; *) p="./$p" ;; esac
   while [ -L "$p" ] && [ "$i" -lt 40 ]; do t=$(readlink "$p"); case "$t" in /*) p=$t ;; *) p="${p%/*}/$t" ;; esac; i=$((i+1)); done
   d=$(cd "${p%/*}/.." && pwd -P) || exit 1
   h=$(cd "${CODDY_HOME:-$HOME/.coddy}" 2>/dev/null && pwd -P)
   v=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$d/.claude-plugin/plugin.json" 2>/dev/null | head -1)
-  c=""; [ ! -e "$d/.git" ] || c=$(git -C "$d" rev-parse --short HEAD 2>/dev/null)
+  c=""; [ ! -e "$d/.git" ] || c=$(unset GIT_DIR GIT_WORK_TREE; git -C "$d" rev-parse --short HEAD 2>/dev/null)
   echo "install: $d"
   echo "via: $([ "$d" = "$h" ] && echo get.sh || echo other)"
   echo "version: ${v:-unknown}"

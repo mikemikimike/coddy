@@ -10,7 +10,12 @@
 set -u
 main() {
   local url="${CODDY_REPO_URL:-https://github.com/mnsami/coddy}" home="${CODDY_HOME:-$HOME/.coddy}" bin="${CODDY_BIN:-$HOME/.local/bin}"
-  local link state sha top
+  local link state sha top v
+  # Absolute, so the link's target resolves from CODDY_BIN and the PATH line works anywhere.
+  case "$home" in /*) ;; *) home="$PWD/$home" ;; esac
+  case "$bin" in /*) ;; *) bin="$PWD/$bin" ;; esac
+  # A GIT_DIR or GIT_CONFIG_* from the caller would point git at another repository or config.
+  for v in "${!GIT_@}"; do case $v in GIT_AUTHOR_*|GIT_COMMITTER_*|GIT_SSH*|GIT_ASKPASS) ;; *) unset "$v" ;; esac; done
   export GIT_TERMINAL_PROMPT=0
   die() { echo "coddy install: $*" >&2; exit 1; }
   # The same repository however its URL is spelled: ssh or https, with or
@@ -31,9 +36,10 @@ main() {
     [ -L "$link" ] && { [ "$(readlink "$link")" = "$home/bin/coddy" ] || [ "$link" -ef "$home/bin/coddy" ]; } ||
       die "$link is there already and is not a link to $home/bin/coddy: remove it, then run this again"
   fi
+  mkdir -p "$bin" 2>/dev/null || die "could not create $bin: make it a directory, then run this again"
 
   if [ -e "$home" ]; then
-    sha=$(git -C "$home" rev-parse --short HEAD)
+    sha=$(git -C "$home" rev-parse -q --verify --short HEAD)
     git -C "$home" fetch -q origin main || die "could not fetch from $url"
     local out; out=$(git -C "$home" merge --ff-only origin/main 2>&1) ||
       die "could not update $home (not a fast-forward, or an untracked file is in the way); nothing changed. git says:
@@ -43,7 +49,7 @@ $out"
     git clone -q -b main "$url" "$home" || die "could not clone $url"
     state=cloned
   fi
-  [ -L "$link" ] || { mkdir -p "$bin" && ln -s "$home/bin/coddy" "$link"; } || die "could not link $link"
+  [ -L "$link" ] || ln -s "$home/bin/coddy" "$link" || die "could not link $link"
   echo "$state: $home at $(git -C "$home" rev-parse --short HEAD)"
   echo "linked: $link"
   case ":$PATH:" in *":$bin:"*) ;; *) echo "$bin is not on your PATH. Add this line to your shell's rc file:"; echo "  export PATH=\"$bin:\$PATH\"" ;; esac

@@ -469,6 +469,15 @@ t 1 "get.sh: an untracked file in the merge's way stops it" get
 t 0 "get.sh: showing git's message" says 'untracked' get
 t 0 "get.sh: and left as it was" sh -c "grep -qx mine '$cs/new.txt' && test \"\$(git -C '$cs' rev-parse --short HEAD)\" = $was"
 rm "$cs/new.txt"; get >/dev/null 2>&1
+git init -q "$tmp/gd"; git -C "$tmp/gd" checkout -q -b main; git -C "$tmp/gd" commit -q --allow-empty -m gd; git -C "$tmp/gd" remote add origin "$tmp/coddy.git"
+upstream seven README.md
+GIT_DIR="$tmp/gd/.git" t 0 "get.sh: a GIT_DIR from the caller is dropped" says '^updated: ' get
+t 0 "get.sh: and its repository left alone" test "$(git -C "$tmp/gd" rev-list --count HEAD)" = 1
+touch "$tmp/binfile"
+t 1 "get.sh: a CODDY_BIN that is a file is refused" env HOME="$gh" CODDY_HOME="$tmp/h2" CODDY_BIN="$tmp/binfile" CODDY_REPO_URL="$tmp/coddy.git" bash "$here/get.sh"
+t 1 "get.sh: before any clone" test -e "$tmp/h2"
+t 0 "get.sh: a relative CODDY_HOME links to where it cloned" sh -c "cd '$tmp' && HOME='$gh' CODDY_HOME=relh CODDY_BIN=relb CODDY_REPO_URL='$tmp/coddy.git' bash '$here/get.sh' >/dev/null && test relb/coddy -ef relh/bin/coddy"
+t 0 "doctor: from stdin says why it cannot" says 'not stdin' sh -c "bash -s doctor < '$here/bin/coddy'"
 # doctor names the install it runs from: get.sh's through the PATH link, another from a checkout.
 doc() { HOME="$gh" CODDY_HOME="$cs" "$@" doctor; }
 t 0 "doctor: through the link, the real install dir" says "^install: $(cd "$cs" && pwd -P)\$" doc "$gh/bin/coddy"
