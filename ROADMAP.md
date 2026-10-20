@@ -2,7 +2,7 @@
 
 coddy's purpose stays the same: **every change an agent makes is tied to a claimed issue, lives in its own worktree, and lands through a pull request, enforced by tooling rather than by prompts.** Within one issue, coddy also runs its own stage from the agreed plan to a reviewed diff: an implementer on a model matched to the issue's difficulty, two hardening passes, and a code and security review loop.
 
-What this roadmap changes is reach and concurrency. coddy aims to support **Claude Code, Codex, Cursor and Copilot CLI** first-class, and to stay correct when several terminals, a lead session with subagents or agent teams, or several teammates work the same repository.
+What this roadmap changes is reach and concurrency. coddy aims to support **Claude Code, Codex, Cursor, Copilot CLI and Gemini CLI** first-class, and to stay correct when several terminals, a lead session with subagents or agent teams, or several teammates work the same repository.
 
 Each phase below is a [GitHub milestone](https://github.com/mnsami/coddy/milestones). Issue numbers are listed per milestone; the milestone pages are the live source.
 
@@ -45,7 +45,7 @@ Go signals: still in use at the end of 4 weeks of dogfooding; at least 3 of 5 co
 
 ### M2 · Agent-agnostic core
 Extract a `coddy` CLI core with no Claude Code dependencies; Claude Code becomes the first adapter.
-- #27 Extract an agent-agnostic coddy CLI core
+- #27 Extract an agent-agnostic coddy CLI core: `bin/coddy` on `CODDY_*` inputs and `.coddy.yml`, with `scripts/*.sh` as the Claude Code adapter (done)
 - #28 Write an AGENTS.md section at onboarding and keep skills portable
 - #16 Post the restated acceptance criteria back to the issue (closed, folded into #88)
 
@@ -55,10 +55,12 @@ Enforcement every agent gets.
 - #14 Make git the default worktree tool, keep jj opt-in
 
 ### M4 · Agent adapters
+One plugin per agent, each carrying the same skills, briefs and `bin/coddy`; what differs is the manifest and the hook names.
 - #30 Spike: build agent adapters on an existing cross-agent hook layer
-- #31 Codex adapter
-- #32 Cursor adapter
-- #33 Copilot CLI adapter
+- #31 Codex adapter: `.codex-plugin/plugin.json` with PreToolUse hooks
+- #32 Cursor adapter: a Cursor plugin; a blocking pre-edit hook is unconfirmed
+- #33 Copilot CLI adapter: reads `.claude-plugin/` directly and passes `CLAUDE_PLUGIN_ROOT` and `CLAUDE_PROJECT_DIR` to hooks, so the Claude Code shims run as they are
+- Gemini CLI adapter: an extension (`gemini-extension.json`) with BeforeTool hooks (issue to be filed)
 - #34 coddy doctor: prerequisites and per-agent enforcement level
 - #15 Create issue worktrees through Claude Code's WorktreeCreate/WorktreeRemove hooks
 
@@ -74,7 +76,7 @@ Enforcement every agent gets.
 
 ## Risks
 
-- **Maintenance.** Four agents' hook APIs are still changing. M4 starts with a spike on building on an existing cross-agent hook layer instead of maintaining four adapters here.
+- **Maintenance.** Five agents' hook APIs are still changing. M4 starts with a spike on building on an existing cross-agent hook layer instead of maintaining five adapters here.
 - **Adoption is untested.** That's what M1's test window is for; M2 onwards waits for its result.
 - **Platform absorption.** GitHub already enforces the remote half for its own cloud agent. coddy's value rests on the local, cross-vendor layer and on tracker semantics (exclusive claims, Jira, lifecycle cleanup).
 - **Orchestrators can grow a guard.** Autonomous board executors such as [super-board](https://github.com/EricTechPro/super-board) already have worktree-per-card, atomic assignee claims, merged-worktree cleanup and a Codex host, and could add interactive-session enforcement from above. The defence is the same: tracker breadth (Jira), the human-in-the-merge promise, and being the guard a factory runs on top of rather than a rival to it.

@@ -58,6 +58,9 @@ echo note > notes.txt; : > empty.txt # untracked on purpose: jj must not make th
 
 t 1 "no skill disables model invocation" grep -rq disable-model-invocation "$here/skills"
 t 1 "no skill names a vendor skill" grep -rqE 'superpowers|code-review:' "$here/skills"
+t 0 "policy.md exists" test -f "$here/skills/start/references/policy.md"
+opens() { sed -n 3p "$1" | grep -qxF 'Read `policy.md` at the path you were given first; its rules apply here. No path given, or the file cannot be read → stop and return `no policy path`.'; }
+for b in implement harden review security; do t 0 "brief $b opens with policy.md" opens "$here/skills/start/$b.md"; done
 # The config schema has three copies. yamlkeys reads the yaml block under a
 # "## Config" heading (README comments out its jira lines, so a leading "# "
 # is dropped), naming a nested key parent.child and leaving out a bare
@@ -70,6 +73,39 @@ schema() { [ "$(yamlkeys "$1")" = "$(bulletkeys "$2")" ] && [ "$(yamlkeys "$1")"
 t 0 "schema: onboard, config and README list the same keys" schema "$here/skills/onboard/SKILL.md" "$here/skills/config/SKILL.md" "$here/README.md"
 awk '{print} /^roadmap: /{print "extra: x"}' "$here/skills/onboard/SKILL.md" > "$tmp/onboard.md"
 t 1 "schema: a key added to one copy only fails it" schema "$tmp/onboard.md" "$here/skills/config/SKILL.md" "$here/README.md"
+# A skill that injects a script's output says what to do on a host that does
+# not inject or expand. fallback <skill> <verb> [vars]: its fallback line names
+# coddy <verb> for reading the sections by hand, `CLAUDE_PLUGIN_ROOT`
+# unexpanded as never a `bin/coddy` inside the project, and each variable the
+# skill takes. A new skill goes in the table.
+fallback() { line=$(grep -F '`CLAUDE_PLUGIN_ROOT` unexpanded' "$1") && for w in "coddy $2" 'never a `bin/coddy`' ${3-}; do case "$line" in *"$w"*) ;; *) return 1;; esac; done; }
+for s in 'config status $ARGUMENTS' 'migrate status' 'next status' 'onboard detect' 'ship status $ARGUMENTS' 'start status $issue $onto $base' 'triage status $ARGUMENTS'; do read -r n v a <<< "$s"; t 0 "skill $n carries the fallback for a host that does not inject" fallback "$here/skills/$n/SKILL.md" "$v" "$a"; done
+grep -vF '`CLAUDE_PLUGIN_ROOT` unexpanded' "$here/skills/next/SKILL.md" > "$tmp/next.md"
+t 1 "a skill that injects without the fallback fails it" fallback "$tmp/next.md" status
+sed '/`CLAUDE_PLUGIN_ROOT` unexpanded/s/coddy status/coddy stat/' "$here/skills/next/SKILL.md" > "$tmp/next.md"
+t 1 "one whose fallback drops the read-by-hand command fails it" fallback "$tmp/next.md" status
+sed '/`CLAUDE_PLUGIN_ROOT` unexpanded/s|never a `bin/coddy`|never a copy|' "$here/skills/next/SKILL.md" > "$tmp/next.md"
+t 1 "one whose fallback drops the never-a-bin/coddy clause fails it" fallback "$tmp/next.md" status
+sed '/`CLAUDE_PLUGIN_ROOT` unexpanded/s/\$ARGUMENTS/$ARGS/' "$here/skills/triage/SKILL.md" > "$tmp/triage.md"
+t 1 "one whose fallback drops its variable fails it" fallback "$tmp/triage.md" status '$ARGUMENTS'
+t 1 "no skill carries the injection syntax inside a line, which Claude Code would run" grep -qE '.!`' "$here"/skills/*/SKILL.md
+t 0 "onboard names the AGENTS.md begin marker" grep -qF '<!-- coddy:begin -->' "$here/skills/onboard/SKILL.md"
+t 0 "onboard names the AGENTS.md end marker" grep -qF '<!-- coddy:end -->' "$here/skills/onboard/SKILL.md"
+# onboard is a resumable wizard: the agenda in order, answers saved under the
+# agent dir, a stop on an existing config that names /coddy:config, and no
+# install command for gh (the PR check runs it inside GitHub Actions alone),
+# while each package manager detect can name gets one for jq.
+t 0 "onboard names the seven wizard steps in order" grep -qF 'checks → tracker → branch → verify → tiers → AGENTS.md → review' "$here/skills/onboard/SKILL.md"
+t 0 "onboard saves its answers under the agent dir" grep -qF '.claude/coddy/onboard-answers.json' "$here/skills/onboard/SKILL.md"
+t 0 "onboard backs up what it replaces under the agent dir" grep -qF '.claude/coddy/backup/' "$here/skills/onboard/SKILL.md"
+t 0 "onboard stops on an existing config and names /coddy:config" sh -c "grep -F 'config: present' '$here/skills/onboard/SKILL.md' | grep -qF '/coddy:config'"
+t 1 "onboard carries no install command for gh" grep -qiE 'install (-y )?(gh|github\.cli)( |$|`)' "$here/skills/onboard/SKILL.md"
+# No hook is live during onboard, so its pre-approved shell is the core's
+# verbs alone: a wildcard in a rule is where rm's flags and operands go, and
+# a redirect or rm on .git/ or .claude/ prompts as a sensitive write anyway.
+t 1 "onboard's allowed-tools holds no wildcard, redirect or rm" sh -c "sed -n 's/^allowed-tools: //p' '$here/skills/onboard/SKILL.md' | grep -qE '\\*|>>|(^| |\\()rm '"
+for v in 'exclude answers' 'exclude config' 'forget answers'; do t 0 "onboard pre-approves issue.sh $v" grep -qF "Bash(bash \"\${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh\" $v)" "$here/skills/onboard/SKILL.md"; done
+for p in brew apt-get dnf winget; do t 0 "onboard names a jq install command for $p" grep -qE "$p"' install (-y )?(jq|jqlang\.jq)( |$|`)' "$here/skills/onboard/SKILL.md"; done
 t 0 "guard allows everything before onboarding" guard "$repo/README.md"
 t 0 "sweep is a quiet no-op before onboarding" run sweep
 
@@ -240,7 +276,7 @@ leg() {
   kept "uncommitted changes"
   t 0 "$tool: and says so" says "holds uncommitted work" run sweep
   rm ".worktrees/$p/wip.txt"
-  CLAUDE_PROJECT_DIR="$repo/.worktrees/$p" bash "$here/scripts/issue.sh" sweep >/dev/null 2>&1
+  (cd ".worktrees/$p" && CLAUDE_PROJECT_DIR="$repo/.worktrees/$p" bash "$here/scripts/issue.sh" sweep) >/dev/null 2>&1
   t 0 "$tool: sweep keeps the worktree the session is in" test -d ".worktrees/$p"
   echo "sess-b 1" > ".git/coddy/$p/owner" # claimed by another session whose process runs
   kept "a merged worktree another running session holds"
@@ -379,7 +415,7 @@ tripped 2 "config: rewriting it trips" 'echo "verify: true" >> .claude/coddy.yml
 t 0 "config: restored after the rewrite" same
 tripped 2 "config: removing .claude/ trips" 'rm -rf .claude'
 t 0 "config: restored after .claude/ was removed" same
-# A shared (committed) config that changes through git is not a bypass.
+# A shared (committed) config that changes through git is restored too: the user accepts it with /coddy:config.
 # The legs merged branches into main on the remote: the local commits above go on
 # top. git reset first: jj colocation left the untracked files as intent-to-add
 # index entries, which a rebase refuses to start over.
@@ -387,8 +423,8 @@ git reset -q && git pull -q --rebase origin main
 git add -f .claude/coddy.yml; git commit -q -m "share config"; git push -q origin HEAD:main
 git clone -q -b main "$tmp/origin.git" "$tmp/mate" 2>/dev/null
 (cd "$tmp/mate" && echo "roadmap: docs/ROADMAP.md" >> .claude/coddy.yml && git commit -q -am "roadmap" && git push -q origin HEAD:main)
-tripped 0 "config: a pulled change to a shared config stands" 'git fetch -q origin && git merge -q --ff-only origin/main'
-t 0 "config: the pulled change is kept" grep -q '^roadmap:' .claude/coddy.yml
+tripped 2 "config: a pulled change to a shared config is restored" 'git fetch -q origin && git merge -q --ff-only origin/main'
+t 1 "config: the pulled change waits for /coddy:config" grep -q '^roadmap:' .claude/coddy.yml
 tripped 2 "config: a shell edit to a shared config still trips" 'echo "verify: true" >> .claude/coddy.yml'
 t 1 "config: the shell edit to a shared config is undone" grep -q '^verify: true' .claude/coddy.yml
 
@@ -420,15 +456,16 @@ t 0 "claim records the claiming process's start time" grep -qx "sess-a $$ $start
 rm -r .git/coddy/other; : > .git/coddy/other
 t 0 "issue.sh status owners: a marker from before locks is unknown" owns "other=unknown"
 rm .git/coddy/other
-t 0 "config.sh finds the config from inside a worktree" sh -c "CLAUDE_PROJECT_DIR='$repo/.worktrees/43' bash '$here/scripts/config.sh' | grep -q '^tracker:'"
+t 0 "config.sh finds the config from inside a worktree" sh -c "cd '$repo/.worktrees/43' && CLAUDE_PROJECT_DIR='$repo/.worktrees/43' bash '$here/scripts/config.sh' | grep -q '^tracker:'"
 # rooted <dir>: a session opened in that directory gets the project root from
 # every script: issue.sh status prints it, config.sh and detect.sh find the config,
 # and the guard holds the main checkout's README to it
 rooted() (
-  export CLAUDE_PROJECT_DIR=$1
+  cd "$1" && export CLAUDE_PROJECT_DIR=$1
   bash "$here/scripts/issue.sh" status | grep -qx "root: $repo" || exit 1
   bash "$here/scripts/config.sh" | grep -q '^tracker:' || exit 1
   bash "$here/scripts/detect.sh" | grep -qx 'config: present' || exit 1
+  bash "$here/scripts/detect.sh" | grep -qx "root: $repo" || exit 1
   printf '{"tool_input":{"file_path":"%s"}}' "$repo/README.md" | bash "$here/scripts/issue.sh" guard
   [ $? = 2 ]
 )
@@ -436,6 +473,33 @@ mkdir -p sub/dir; git worktree add -q .claude/worktrees/x 2>/dev/null
 for d in "" /sub/dir /.worktrees/43 /.claude/worktrees/x; do t 0 "root: resolved from ${d:-the repo root}" rooted "$repo$d"; done
 [ ! -d .worktrees/42 ] || t 0 "root: resolved from a jj workspace" rooted "$repo/.worktrees/42"
 git worktree remove --force .claude/worktrees/x; rm -r sub
+# A .claude/settings.json env overrides CLAUDE_PROJECT_DIR in the Bash tool's
+# environment (the hooks get the real one), so a cloned repository could move
+# the root: every shim takes it, for a Bash-tool verb, only while the working
+# directory is it or under it, compared by real path, and PWD cannot be set from there.
+# from <dir> <CLAUDE_PROJECT_DIR> <root>: run there, every shim resolves that root
+from() { (cd "$1" && export CLAUDE_PROJECT_DIR=$2 && bash "$here/scripts/issue.sh" status | grep -qx "root: $3" && bash "$here/scripts/detect.sh" | grep -qx "root: $3" && { [ "$3" != "$repo" ] || bash "$here/scripts/config.sh" | grep -q '^tracker:'; } && { [ "$3" = "$repo" ] || bash "$here/scripts/config.sh" | grep -qx NOT_ONBOARDED; }); }
+mkdir "$tmp/other" "$tmp/repo2"; ln -s "$repo" "$tmp/link"
+t 0 "shim: a CLAUDE_PROJECT_DIR that does not hold the working directory is ignored" from "$repo" "$tmp/other" "$repo"
+t 0 "shim: so is one that holds it by spelling alone" from "$tmp/repo2" "$repo" "$tmp/repo2"
+t 0 "shim: so is a relative one" from "$repo" .. "$repo"
+t 0 "shim: one above the working directory is honoured" from "$repo" "$tmp" "$tmp"
+t 0 "shim: one naming the working directory by its real path is honoured" from "$tmp/link" "$repo" "$repo"
+rm -r "$tmp/other" "$tmp/repo2" "$tmp/link"
+# The hooks get the real CLAUDE_PROJECT_DIR while their working directory
+# follows the Bash tool's cd, so guard, snap and trip take it as it is: held
+# to the working directory, a cd out of the project would drop the root, and
+# every guardrail with it.
+# away <command...>: run from outside the project, as a hook runs after that cd
+away() { (cd "$tmp" && "$@"); }
+# asks <path>: guard exits 0 and asks the user, as hook JSON
+asks() { out=$(guard "$1") && printf %s "$out" | jq -e '.hookSpecificOutput | .hookEventName == "PreToolUse" and .permissionDecision == "ask"'; }
+t 2 "hook: guard after a cd out of the project blocks the main checkout" away guard "$repo/README.md"
+t 0 "hook: and asks on .coddy.yml" away asks "$repo/.coddy.yml"
+away wire snap w; echo x > stray.txt; t 2 "hook: trip after a cd out of the project reports a stray write" away wire trip w; rm stray.txt
+away wire snap w; rm .claude/coddy.yml; t 2 "hook: trip after a cd out of the project restores a deleted config" away wire trip w
+t 0 "hook: and the config came back" same
+wire snap w; t 0 "hook: a cd out of the project is not a change" away wire trip w
 # detect <line> [VAR=value...]: detect.sh prints exactly that line
 detect() { line=$1; shift; env CLAUDE_PROJECT_DIR="$repo" "$@" "$BASH" "$here/scripts/detect.sh" 2>/dev/null | grep -qx "$line"; }
 detect_remote() {

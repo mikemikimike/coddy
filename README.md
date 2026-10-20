@@ -38,16 +38,35 @@ the issue and given it a worktree. A hook enforces that, not the prompt.
 
 ## Install
 
+In Claude Code, as a plugin:
+
 ```bash
 claude plugin marketplace add mnsami/coddy   # or a local path to this repo
 claude plugin install coddy@coddy
 ```
 
+For another agent (Codex, Cursor, Copilot CLI, Gemini CLI) or your own
+terminal:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mnsami/coddy/main/get.sh | bash
+```
+
+It clones `main` into `~/.coddy` (a rerun fast-forwards it, and stops on
+local changes to tracked files), links `coddy` into `~/.local/bin` and
+prints the line to add when that is not on your `PATH`. Your agent reads
+the skills as Markdown from `~/.coddy/skills/`, starting with
+`onboard/SKILL.md`. `coddy doctor` says which install a `coddy` runs from.
+The plugin keeps its own copy and does not use `~/.coddy`.
+
 You also need:
 
 - `jq`. The edit guard needs it and blocks every edit without it.
 - `jj` ([Jujutsu](https://jj-vcs.github.io)), unless you pick `worktree: git`
-  at onboarding.
+  at onboarding. `/coddy:onboard` installs either one that is missing
+  (Homebrew, apt-get, dnf or winget) through a shell command you allow;
+  `jj` has no apt-get package, so there it names the install page and
+  recommends `worktree: git`.
 - For GitHub Issues: the GitHub plugin, enabled and signed in with a token
   that can read and write the repository's issues and pull requests.
 - For Jira: the Atlassian plugin.
@@ -56,12 +75,34 @@ Trackers are reached through those plugins' MCP tools. Neither needs a CLI.
 The PR check workflow alone runs `gh`, inside GitHub Actions, where it is
 built in.
 
+The mechanics live in one command, `bin/coddy`, with no Claude Code
+dependency: Claude Code puts the plugin's `bin/` on the Bash tool's `PATH`
+while the plugin is enabled. claude.ai and Cowork do not install a plugin
+that has a top-level `bin/`, through organisation settings either, so coddy
+needs the Claude Code CLI. `get.sh` links `coddy` into `~/.local/bin`
+and prints the `PATH` line to add when that directory is not on `PATH`.
+It reads `CODDY_ROOT` (where to look for the project; the working directory
+without it), `CODDY_SESSION` and `CODDY_PID` (the session and process a
+claim is held to) and `CODDY_AGENT_DIR` (the agent's own directory, such as
+`.claude`, free to edit); Claude Code's hooks and skills set those from its
+own environment.
+
 ## Onboard a project
 
-Run `/coddy:onboard` inside the project. It detects what it can, asks for
-the rest, and writes `.claude/coddy.yml` (see [Config](#config)). It also
-offers to copy the PR check workflow into the project, and tells you what to
-set by hand so the default branch requires a pull request.
+Run `/coddy:onboard` inside the project. It is a wizard of seven steps,
+`checks → tracker → branch → verify → tiers → AGENTS.md → review`, with an
+agenda before each and at most one question per step. It detects what it
+can and asks for the rest; a missing `jq` or `jj` is installed through a
+shell command you allow (declining `jq` stops it, declining `jj` picks
+`worktree: git`). Your answers are saved under `.claude/coddy/`, so a run
+that stops resumes where it was. At review it shows the config and, on your
+yes, writes the PR check workflow and the coddy block into `AGENTS.md` (so
+an agent without the plugin reads the rules), backing up any file it
+replaces under `.claude/coddy/backup/`, and then `.coddy.yml` (see
+[Config](#config)). It tells you what to set by hand so the default branch
+requires a pull request. A project that already has a config is sent to
+`/coddy:migrate` when it is behind the current version, `/coddy:config`
+otherwise.
 
 ## Skills
 
@@ -70,8 +111,9 @@ The next `next` or `start` sweeps up what the merge left behind.
 
 | Skill | What it does |
 |---|---|
-| `/coddy:onboard` | Detects the project, asks for what it can't infer, writes `.claude/coddy.yml` |
-| `/coddy:config [key=value ...]` | Shows `.claude/coddy.yml`, or changes the keys you name |
+| `/coddy:onboard` | A seven-step wizard: detects the project, installs `jq` and `jj` when you allow it, asks for what it can't infer (answers saved, so a re-run resumes), then writes the PR check workflow, the coddy block into `AGENTS.md` (backing up what it replaces) and `.coddy.yml` |
+| `/coddy:config [key=value ...]` | Shows `.coddy.yml`, or changes the keys you name |
+| `/coddy:migrate` | Brings the config up to the current `version`, moving one an earlier version wrote to `.claude/coddy.yml` to `.coddy.yml`, after backing it up under `.claude/coddy/backup/` |
 | `/coddy:next` | Recommends the next issue from the tracker and the roadmap, setting aside issues in progress, assigned to someone else, or claimed on this machine |
 | `/coddy:start <issue> [onto <base-issue>]` | Fetches the issue, claims it, moves it to In Progress and gives it its own worktree in `.worktrees/<issue>`. Then reads beyond the ticket, thinks the work through with you, and asks for one approval of the plan with its difficulty tier. On a yes it implements on that tier's model, hardens the result twice, and loops code and security review until nothing at `review_block` or above is left (at most `review_rounds` rounds). Run it again to resume. Name a PR or branch, or let the issue's open PR be found: that branch instead. `onto` starts from another issue's branch instead of the default branch |
 | `/coddy:ship [issue]` | Runs `verify` in the issue's worktree, commits, pushes, opens the PR and links it back to the issue. Started `onto` another issue: the PR targets that issue's branch, so it shows only its own diff |
@@ -97,7 +139,8 @@ Five layers. The first three are hooks, live in every onboarded project.
 **Edit guard.** A hook rejects every file edit Claude attempts outside
 `.worktrees/<issue>/`. Inside, it rejects edits until `/coddy:start` has
 claimed that issue. `.claude/` stays editable, except Claude Code's own
-worktrees under it. The hook needs `jq`.
+worktrees under it. An edit of `.coddy.yml` asks you first. The hook needs
+`jq`, and blocks every edit without it.
 
 A claim belongs to the session that made it. Only that session may edit or
 push the worktree. Another session starting the same issue is refused and
@@ -115,10 +158,15 @@ key.
 hook compares the main checkout before and after each one, and tells Claude
 to undo any change it left there.
 
-**Config lock.** `.claude/coddy.yml` is the off switch for all of this. A
-shell command from Claude that removes or rewrites it is undone, and
-`/coddy:config` asks you first. A change that arrives through git, such as a
-pull of a shared config, stands.
+**Config lock.** `.coddy.yml` is the off switch for all of this. A shell
+command from Claude that removes or rewrites it is undone, and so is one
+that creates it next to a config still at `.claude/coddy.yml`, which it
+would shadow; `/coddy:config` asks you first, by whatever path the edit
+reaches the file, a symlink from a worktree included. A change that came
+through git, a pull of a shared config or a checkout, is undone too, since
+nothing on disk tells it from one a command forged: the message sends Claude
+to `/coddy:config`, which shows you the diff against `HEAD` and writes it
+only when you say so.
 
 **Branch protection.** The backstop for a command that edits, commits and
 pushes to the default branch in one go. Nothing in coddy can set it.
@@ -131,11 +179,12 @@ Open and assigned is what holds from `/coddy:start` to the merge.
 The `in progress` label comes off when the PR opens, and the check runs
 again on every push. It is keyed on the closing reference, not the branch
 name. So it is the one layer that holds for a cloud agent, or for any
-branch coddy did not name. `/coddy:onboard` offers to copy it to
-`.github/workflows/coddy.yml`, or copy the file yourself. Its ceilings:
+branch coddy did not name. `/coddy:onboard` writes it to
+`.github/workflows/coddy.yml` on a GitHub tracker, backing up a differing
+copy under `.claude/coddy/backup/`; commit it yourself. Its ceilings:
 
 - GitHub Issues only. A Jira project gets the local guardrails alone:
-  `/coddy:onboard` does not offer the check, and a copied one fails every
+  `/coddy:onboard` does not write the check, and a copied one fails every
   Jira PR, which carries no closing reference.
 - GitHub computes the references only on a PR against the default branch.
   On a PR stacked on another branch, the check reads the closing keywords
@@ -145,10 +194,11 @@ branch coddy did not name. `/coddy:onboard` offers to copy it to
 
 ## Config
 
-`.claude/coddy.yml`, written by `/coddy:onboard` and changed by
-`/coddy:config`:
+`.coddy.yml` at the project root, written by `/coddy:onboard` and changed
+by `/coddy:config`:
 
 ```yaml
+version: 1                   # schema version; set by /coddy:onboard and /coddy:migrate
 tracker: github              # github | jira
 repo: owner/name             # github only
 # jira:                      # jira only, in place of repo
@@ -172,8 +222,12 @@ review_rounds: 3             # optional; 1-5 (default 3)
   `/coddy:config` refuses to switch it while an issue worktree exists.
 - `guard: warn` is described under the edit guard above. `/coddy:onboard`
   leaves the key out; set it with `/coddy:config guard=warn`.
-- Delete the file yourself to leave the workflow. Every other skill refuses
-  to run without it.
+- `.claude/coddy.yml`, where earlier versions kept the config, is still read
+  while `.coddy.yml` is absent; `/coddy:migrate` moves it. A config without
+  `version` is version 0; `/coddy:migrate` brings it up to date.
+- Delete the file yourself to leave the workflow (`.git/coddy`, where claims
+  keep their records, can go with it). Every other skill
+  refuses to run without the file.
 
 ## Related projects
 
@@ -199,11 +253,11 @@ It is not a board, a planner or a factory, and it pairs with tools that are:
 - Pick an open [issue](https://github.com/mnsami/coddy/issues) and work it
   through coddy itself: `/coddy:start <issue>`, then `/coddy:ship`. The
   config is personal, so run `/coddy:onboard` in your clone first; `verify`
-  is the two commands under [Develop](#develop).
+  is the three commands under [Develop](#develop).
 - Commits are `type: summary` (`feat`, `fix`, `chore`).
 - The PR must close its issue (`Closes #<n>`).
-- Before opening it, `bash scripts/selftest.sh` and `claude plugin validate .`
-  pass; `/coddy:ship` runs them as `verify`.
+- Before opening it, `bash scripts/selftest.sh`, `bash scripts/selftest-core.sh`
+  and `claude plugin validate .` pass; `/coddy:ship` runs them as `verify`.
 - Releases are a version bump of `.claude-plugin/plugin.json` through a PR of
   its own, never a direct commit to `main`. The marketplace installs from
   `main`, and an installed copy changes only after a bump.
@@ -212,7 +266,8 @@ It is not a board, a planner or a factory, and it pairs with tools that are:
 ## Develop
 
 ```bash
-bash scripts/selftest.sh                 # the scripts end to end, in a throwaway repo
+bash scripts/selftest.sh                 # the Claude Code shims end to end, in a throwaway repo
+bash scripts/selftest-core.sh            # bin/coddy on its own inputs, with no CLAUDE_* set
 claude plugin validate .                 # manifest and skill frontmatter
 claude --plugin-dir . -p "/coddy:next"   # run one skill headless against the working copy
 ```
