@@ -79,7 +79,8 @@ The mechanics live in one command, `bin/coddy`, with no Claude Code
 dependency: Claude Code puts the plugin's `bin/` on the Bash tool's `PATH`
 while the plugin is enabled. claude.ai and Cowork do not install a plugin
 that has a top-level `bin/`, through organisation settings either, so coddy
-needs the Claude Code CLI. `get.sh` puts it on your own `PATH`.
+needs the Claude Code CLI. `get.sh` links `coddy` into `~/.local/bin`
+and prints the `PATH` line to add when that directory is not on `PATH`.
 It reads `CODDY_ROOT` (where to look for the project; the working directory
 without it), `CODDY_SESSION` and `CODDY_PID` (the session and process a
 claim is held to) and `CODDY_AGENT_DIR` (the agent's own directory, such as

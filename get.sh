@@ -9,11 +9,12 @@
 # Wrapped in main so a download cut short runs nothing.
 set -u
 main() {
-  local url="${CODDY_REPO_URL:-https://github.com/mnsami/coddy}" home="${CODDY_HOME:-$HOME/.coddy}" bin="${CODDY_BIN:-$HOME/.local/bin}"
-  local link state sha top v
+  local url="${CODDY_REPO_URL:-https://github.com/mnsami/coddy}" home="${CODDY_HOME:-${HOME:?is not set: set it, or CODDY_HOME and CODDY_BIN}/.coddy}" bin="${CODDY_BIN:-${HOME:?is not set: set it, or CODDY_HOME and CODDY_BIN}/.local/bin}"
+  local link state sha top v a
   # Absolute, so the link's target resolves from CODDY_BIN and the PATH line works anywhere.
   case "$home" in /*) ;; *) home="$PWD/$home" ;; esac
   case "$bin" in /*) ;; *) bin="$PWD/$bin" ;; esac
+  bin="${bin%"${bin##*[!/]}"}" # no trailing /, so the PATH check below matches
   # git records a relative local repository by its absolute path; so does this, or a rerun would not match it.
   case "$url" in /*|*://*|[!/]*@*:*) ;; *) [ ! -e "$url" ] || url="$PWD/$url" ;; esac
   # A GIT_DIR or GIT_CONFIG_* from the caller would point git at another repository or config.
@@ -51,23 +52,26 @@ main() {
     [ -L "$link" ] && { [ "$(readlink "$link")" = "$home/bin/coddy" ] || [ "$link" -ef "$home/bin/coddy" ]; } ||
       die "$link is there already and is not a link to $home/bin/coddy: remove it, then run this again"
   fi
-  mkdir -p "$bin" 2>/dev/null || die "could not create $bin: make it a directory, then run this again"
+  # CODDY_BIN is made only once the checkout is in place, so a failed clone or fetch leaves none behind.
+  a=$bin; while [ ! -e "$a" ] && [ ! -L "$a" ]; do a=${a%/*}; a=${a:-/}; done
+  [ -d "$a" ] && { [ "$a" = "$bin" ] || [ -w "$a" ]; } || die "could not create $bin: make it a directory, then run this again"
 
   if [ -e "$home" ]; then
     sha=$(git -C "$home" rev-parse -q --verify --short HEAD)
     git -C "$home" fetch -q origin main || die "could not fetch from $url"
     local out; out=$(git -C "$home" merge --ff-only origin/main 2>&1) ||
-      die "could not update $home (not a fast-forward, or an untracked file is in the way); nothing changed. git says:
+      die "could not update $home (not a fast-forward, or an untracked file is in the way); the checkout and HEAD are unchanged. git says:
 $out"
     if [ "$(git -C "$home" rev-parse --short HEAD)" = "$sha" ]; then state="up to date"; else state=updated; fi
   else
-    git clone -q -b main "$url" "$home" || die "could not clone $url"
+    git clone -q -b main -- "$url" "$home" || die "could not clone $url"
     state=cloned
   fi
+  mkdir -p "$bin" 2>/dev/null || die "could not create $bin"
   [ -L "$link" ] || ln -s "$home/bin/coddy" "$link" || die "could not link $link"
   echo "$state: $home at $(git -C "$home" rev-parse --short HEAD)"
   echo "linked: $link"
-  case ":$PATH:" in *":$bin:"*) ;; *) echo "$bin is not on your PATH. Add this line to your shell's rc file:"; echo "  export PATH=\"$bin:\$PATH\"" ;; esac
+  case ":$(printf %s "$PATH" | sed 's#/*:#:#g; s#/*$##'):" in *":$bin:"*) ;; *) echo "$bin is not on your PATH. Add this line to your shell's rc file:"; echo "  export PATH=\"$bin:\$PATH\"" ;; esac
   cat <<EOF
 
 Next:

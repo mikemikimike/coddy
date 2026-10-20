@@ -428,7 +428,7 @@ mkdir -p "$src/bin" "$src/.claude-plugin" "$gh" "$tmp/root"
 cp "$here/bin/coddy" "$src/bin/"; cp "$here/.claude-plugin/plugin.json" "$src/.claude-plugin/"; echo x > "$src/README.md"
 git -C "$src" add -A; git -C "$src" commit -q -m init; git clone -q --bare "$src" "$tmp/coddy.git"
 upstream() { echo "$1" > "$src/$2"; git -C "$src" add -A; git -C "$src" commit -q -m "$1"; git -C "$src" push -q "$tmp/coddy.git" main; }
-get() { HOME="$gh" CODDY_HOME="$cs" CODDY_BIN="$gh/bin" CODDY_REPO_URL="${url-$tmp/coddy.git}" PATH="${gpath-$PATH}" bash -s < "$here/get.sh"; }
+get() { HOME="$gh" CODDY_HOME="$cs" CODDY_BIN="${gbin-$gh/bin}" CODDY_REPO_URL="${url-$tmp/coddy.git}" PATH="${gpath-$PATH}" bash -s < "$here/get.sh"; }
 sha() { git -C "$cs" rev-parse --short HEAD; }
 printf '#!/bin/sh\necho 0\n' > "$tmp/root/id"; chmod +x "$tmp/root/id"
 gpath="$tmp/root:$PATH" t 1 "get.sh: refuses root" get
@@ -446,6 +446,8 @@ t 0 "get.sh: for other agents too" says "$cs/skills/onboard/SKILL.md" get
 t 0 "get.sh: a rerun is up to date" says "^up to date: $cs at $(sha)\$" get
 t 0 "get.sh: CODDY_BIN off PATH prints the line to add" says "export PATH=\"$gh/bin:" get
 gpath="$gh/bin:$PATH" t 1 "get.sh: and on PATH does not" says 'export PATH=' get
+gbin="$gh/bin/" gpath="$gh/bin:$PATH" t 1 "get.sh: nor with a trailing / on CODDY_BIN" says 'export PATH=' get
+gpath="$gh/bin/:$PATH" t 1 "get.sh: nor on the PATH entry" says 'export PATH=' get
 t 0 "get.sh: and edits no rc file" sh -c "! ls -A '$gh' | grep -q '^\.[a-z]*rc\$\|profile'"
 upstream two README.md
 t 0 "get.sh: a new remote commit fast-forwards" says "^updated: $cs at $(git -C "$src" rev-parse --short HEAD)\$" get
@@ -467,6 +469,7 @@ t 0 "get.sh: an untracked file does not block" says '^updated: ' get
 upstream six new.txt; echo mine > "$cs/new.txt"; was=$(sha)
 t 1 "get.sh: an untracked file in the merge's way stops it" get
 t 0 "get.sh: showing git's message" says 'untracked' get
+t 0 "get.sh: saying the checkout is unchanged" says 'the checkout and HEAD are unchanged' get
 t 0 "get.sh: and left as it was" sh -c "grep -qx mine '$cs/new.txt' && test \"\$(git -C '$cs' rev-parse --short HEAD)\" = $was"
 rm "$cs/new.txt"; get >/dev/null 2>&1
 git init -q "$tmp/gd"; git -C "$tmp/gd" checkout -q -b main; git -C "$tmp/gd" commit -q --allow-empty -m gd; git -C "$tmp/gd" remote add origin "$tmp/coddy.git"
@@ -476,6 +479,11 @@ t 0 "get.sh: and its repository left alone" test "$(git -C "$tmp/gd" rev-list --
 touch "$tmp/binfile"
 t 1 "get.sh: a CODDY_BIN that is a file is refused" env HOME="$gh" CODDY_HOME="$tmp/h2" CODDY_BIN="$tmp/binfile" CODDY_REPO_URL="$tmp/coddy.git" bash "$here/get.sh"
 t 1 "get.sh: before any clone" test -e "$tmp/h2"
+t 1 "get.sh: an unreachable repository is refused" env HOME="$gh" CODDY_HOME="$tmp/h5" CODDY_BIN="$tmp/b5/bin" CODDY_REPO_URL="$tmp/nowhere.git" bash "$here/get.sh"
+t 1 "get.sh: and leaves no CODDY_BIN behind" test -e "$tmp/b5"
+t 0 "get.sh: no HOME and no CODDY_HOME says so" says 'HOME: is not set' env -u HOME CODDY_BIN="$tmp/b7" CODDY_REPO_URL="$tmp/coddy.git" bash "$here/get.sh"
+t 0 "get.sh: nor CODDY_BIN" says 'HOME: is not set' env -u HOME CODDY_HOME="$tmp/h7" CODDY_REPO_URL="$tmp/coddy.git" bash "$here/get.sh"
+t 1 "get.sh: before any clone" test -e "$tmp/h7"
 t 0 "get.sh: a relative CODDY_HOME links to where it cloned" sh -c "cd '$tmp' && HOME='$gh' CODDY_HOME=relh CODDY_BIN=relb CODDY_REPO_URL='$tmp/coddy.git' bash '$here/get.sh' >/dev/null && test relb/coddy -ef relh/bin/coddy"
 t 0 "get.sh: a relative CODDY_REPO_URL matches on the rerun" sh -c "cd '$tmp' && for i in 1 2; do HOME='$gh' CODDY_HOME=relh3 CODDY_BIN=relb3 CODDY_REPO_URL=coddy.git bash '$here/get.sh' || exit 1; done | grep -q '^up to date: '"
 # The origin in another spelling of the same repository passes the origin check and reaches the fetch, which ssh=false stops.
@@ -483,6 +491,8 @@ for o in 'git@GitHub.com:MNSami/Coddy.git' 'ssh://git@github.com/mnsami/coddy.gi
   git -C "$cs" remote set-url origin "$o"
   url=https://github.com/mnsami/coddy GIT_SSH_COMMAND=false t 0 "get.sh: origin $o is the same repository" says 'could not fetch' get
 done
+url=https://github.com/mnsami/coddy GIT_SSH_COMMAND=false gbin="$tmp/b6/bin" get >/dev/null 2>&1
+t 1 "get.sh: a failed fetch leaves no CODDY_BIN behind" test -e "$tmp/b6"
 git -C "$cs" remote set-url origin "$tmp/coddy.git"
 t 0 "doctor: from stdin says why it cannot" says 'not stdin' sh -c "bash -s doctor < '$here/bin/coddy'"
 # doctor names the install it runs from: get.sh's through the PATH link, another from a checkout.
@@ -493,6 +503,8 @@ t 0 "doctor: the installed commit" says "^commit: $(sha)\$" doc "$gh/bin/coddy"
 t 0 "doctor: the version" says "^version: $(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$here/.claude-plugin/plugin.json")\$" doc "$gh/bin/coddy"
 t 0 "doctor: from this checkout, via other" says '^via: other$' doc "$here/bin/coddy"
 t 0 "doctor: naming this checkout" says "^install: $(cd "$here" && pwd -P)\$" doc "$here/bin/coddy"
+t 0 "doctor: with no HOME" says '^via: other$' env -u HOME -u CODDY_HOME "$here/bin/coddy" doctor
+t 1 "doctor: and no unbound variable" says 'unbound' env -u HOME -u CODDY_HOME "$here/bin/coddy" doctor
 t 0 "doctor: a CDPATH does not move it" sh -c "cd '$here' && CDPATH='$gh' HOME='$gh' bash bin/coddy doctor | grep -qx 'install: $(cd "$here" && pwd -P)'"
 
 exit $fail
