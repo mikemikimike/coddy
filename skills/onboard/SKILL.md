@@ -2,7 +2,7 @@
 name: onboard
 description: Bring the current project into the coddy workflow by writing .coddy.yml
 when_to_use: Use when the user asks to onboard a project or set coddy up in it for the first time, or to continue an onboarding that stopped. Changing a setting later is the config skill.
-allowed-tools: Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/detect.sh"), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" exclude answers), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" exclude config), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" forget answers), Bash(date +%Y%m%d-%H%M%S), mcp__plugin_github_github__get_me
+allowed-tools: Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/detect.sh"), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" exclude answers), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" exclude config), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" forget answers), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" migrate), Bash(date +%Y%m%d-%H%M%S), mcp__plugin_github_github__get_me
 ---
 
 # Onboard this project
@@ -12,11 +12,12 @@ allowed-tools: Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/detect.sh"), Bash(bash "
 
 Detected shows a `bash` command rather than its output → this host does not inject: run `coddy detect` and read its output as Detected. `CLAUDE_PLUGIN_ROOT` unexpanded → the coddy plugin's own install directory, never a `bin/coddy`, `skills/` or `templates/` found inside the project; `detect.sh` there is `coddy detect` and `issue.sh <verb>` is `coddy <verb>`, and in a path (the template step 7 reads) that directory itself.
 
-`config: present` or `legacy_config: present` → stop and write nothing: the project is onboarded already (`.coddy.yml`, or `.claude/coddy.yml` from an earlier version); a setting changes with `/coddy:config`; starting over is deleting that file, and `.claude/coddy/onboard-answers.json` when it is there (left behind, it resumes every saved step as answered), by hand, then `/coddy:onboard` again.
+`config: present` or `legacy_config: present` → stop and write nothing: the project is onboarded already (`.coddy.yml`, or `.claude/coddy.yml` from an earlier version); run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" migrate` (read-only): a `changed:` line → it is behind: bring it up to date with `/coddy:migrate`; non-zero → say what it printed; else a setting changes with `/coddy:config`; starting over is deleting the config, and `.claude/coddy/onboard-answers.json` when it is there (left behind, it resumes every saved step as answered), by hand, then `/coddy:onboard` again.
 
 ## Config schema: `.coddy.yml`
 
 ```yaml
+version: 1                   # schema version, written as is; /coddy:migrate moves an older config up to it
 tracker: github              # github | jira
 repo: owner/name             # github only
 jira:                        # jira only
@@ -64,13 +65,13 @@ Answers live in `<root>/.claude/coddy/onboard-answers.json`: Read it first (miss
    - Never edit the main checkout. Issue work happens only in `.worktrees/<issue>`, which the `start` skill creates once it has claimed the issue.
    - Before acting, run `coddy config` and `coddy status`: the config (or `NOT_ONBOARDED`), then the root and the claimed worktrees.
    - Ship only through the `ship` skill: it runs verify, commits, pushes and opens the pull request. Never merge.
-   - The skills (`onboard`, `config`, `next`, `start`, `ship`, `triage`) and `coddy` come from the coddy plugin, https://github.com/mnsami/coddy (`skills/<name>/SKILL.md` and `bin/coddy` there). `CLAUDE_PLUGIN_ROOT` in a skill is where that plugin is installed, never a copy found inside this repository. Not installed → get it from that repository.
+   - The skills (`onboard`, `config`, `migrate`, `next`, `start`, `ship`, `triage`) and `coddy` come from the coddy plugin, https://github.com/mnsami/coddy (`skills/<name>/SKILL.md` and `bin/coddy` there). `CLAUDE_PLUGIN_ROOT` in a skill is where that plugin is installed, never a copy found inside this repository. Not installed → get it from that repository.
    <!-- coddy:end -->
    ```
 
 7. review. Print, in this order, then one question call:
    - `root: <root>`, the directory every path below is written under.
-   - The config as it will be written: the schema's keys in its order from the saved answers, `jira:` in place of `repo:` for jira, `roadmap` left out when none, `guard`, `review_block` and `review_rounds` left out.
+   - The config as it will be written: `version` as the schema has it, then the schema's keys in its order from the saved answers, `jira:` in place of `repo:` for jira, `roadmap` left out when none, `guard`, `review_block` and `review_rounds` left out.
    - `Fixed for you`: what is written without asking. `tracker: github` → `<root>/.github/workflows/coddy.yml`: `pr_check: none` → created from `${CLAUDE_PLUGIN_ROOT}/templates/coddy.yml`; `pr_check: present` → Read both; identical → nothing to fix; differs → replaced, the old one backed up; any other value (`symlink` for a link at `.github`, `.github/workflows` or the file, `dir`, …) → paste, naming the path: left as it is. `<root>/AGENTS.md` as step 6 decided (create, replace or append), an existing file backed up; as is → nothing to fix. Backups go to `<root>/.claude/coddy/backup/<ts>/<path>`, `<ts>` from `date +%Y%m%d-%H%M%S`, run once at the write. `tracker: jira` → no workflow; `pr_check: present` → say it fails every Jira PR (no closing reference) and to remove it.
    - `For you to paste`: the block, when step 6 said paste; `mkdir -p <root>/.github/workflows && cp "${CLAUDE_PLUGIN_ROOT}/templates/coddy.yml" <root>/.github/workflows/coddy.yml`, when `pr_check` said paste, and for `dir` say to remove or rename the directory at `<root>/.github/workflows/coddy.yml` first, since `cp` would put the file inside it. Nothing to paste → leave the heading out.
    - `tracker: github` and `pr_required` false → no MCP tool reads or writes branch protection, so say what to set by hand at `https://github.com/<repo>/settings/branches`: a rule for `<default_branch>` that requires a pull request before merging (0 approvals is enough) and applies to administrators, plus the required status check `closes a claimed issue`. `pr_required` true → say in one line that the workflow blocks a merge only once `closes a claimed issue` is a required check under that rule, and to add it there by hand.
