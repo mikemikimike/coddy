@@ -44,7 +44,7 @@ set -u
 # The install this runs from, needing no project: its real directory, through
 # a PATH link or a shim that sources it; get.sh's when that is CODDY_HOME.
 if [ "${1-}" = doctor ]; then
-  p="${BASH_SOURCE[0]-}" i=0
+  p="${BASH_SOURCE[0]-}" i=0; unset CDPATH # a CDPATH would send cd elsewhere and echo there
   [ -n "$p" ] || { echo "coddy: doctor needs to run from its file, not stdin" >&2; exit 1; }
   case "$p" in */*) ;; *) p="./$p" ;; esac
   while [ -L "$p" ] && [ "$i" -lt 40 ]; do t=$(readlink "$p"); case "$t" in /*) p=$t ;; *) p="${p%/*}/$t" ;; esac; i=$((i+1)); done

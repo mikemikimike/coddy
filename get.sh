@@ -14,13 +14,28 @@ main() {
   # Absolute, so the link's target resolves from CODDY_BIN and the PATH line works anywhere.
   case "$home" in /*) ;; *) home="$PWD/$home" ;; esac
   case "$bin" in /*) ;; *) bin="$PWD/$bin" ;; esac
+  # git records a relative local repository by its absolute path; so does this, or a rerun would not match it.
+  case "$url" in /*|*://*|[!/]*@*:*) ;; *) [ ! -e "$url" ] || url="$PWD/$url" ;; esac
   # A GIT_DIR or GIT_CONFIG_* from the caller would point git at another repository or config.
   for v in "${!GIT_@}"; do case $v in GIT_AUTHOR_*|GIT_COMMITTER_*|GIT_SSH*|GIT_ASKPASS) ;; *) unset "$v" ;; esac; done
   export GIT_TERMINAL_PROMPT=0
   die() { echo "coddy install: $*" >&2; exit 1; }
-  # The same repository however its URL is spelled: ssh or https, with or
-  # without a trailing / or .git.
-  norm() { local u="${1%/}"; u="${u%.git}"; u="${u%/}"; case "$u" in git@github.com:*) u="https://github.com/${u#git@github.com:}" ;; esac; printf %s "$u"; }
+  # The same repository however its URL is spelled: ssh (scp form or ssh://)
+  # or https, any case of host (and of path on github.com, which ignores it),
+  # file:// or a plain path, with or without a trailing / or .git.
+  norm() {
+    local u="${1%/}" h; u="${u%.git}"; u="${u%/}"; u="${u#file://}"; u="${u//\/.\///}"
+    case "$u" in
+      ssh://*@*) u="https://${u#ssh://*@}" ;;
+      ssh://*) u="https://${u#ssh://}" ;;
+      [!/]*@*:*) h="${u#*@}"; u="https://${h%%:*}/${h#*:}" ;;
+    esac
+    case "$u" in https://*)
+      h="${u#https://}"; u="https://$(printf %s "${h%%/*}" | tr '[:upper:]' '[:lower:]')${h#"${h%%/*}"}"
+      case "$u" in https://github.com/*) u=$(printf %s "$u" | tr '[:upper:]' '[:lower:]') ;; esac ;;
+    esac
+    printf %s "$u"
+  }
 
   [ "$(id -u)" != 0 ] || die "refusing to run as root: run it as the user who will use coddy"
   command -v git >/dev/null || die "git is needed: install it, then run this again"

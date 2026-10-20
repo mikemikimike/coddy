@@ -10,7 +10,7 @@ A Claude Code plugin (`coddy`) that is also its own single-plugin marketplace. T
 
 ```bash
 bash scripts/selftest.sh                    # the shims end to end: both worktree tools, claim, push, guard, tripwire, PR check
-bash scripts/selftest-core.sh               # bin/coddy on its CODDY_* inputs alone, with no CLAUDE_* set: root, config paths, guard's ask, config lock, start and ship
+bash scripts/selftest-core.sh               # bin/coddy on its CODDY_* inputs alone, with no CLAUDE_* set: root, config paths, guard's ask, config lock, start and ship, `get.sh` and `doctor`
 claude plugin validate .                    # manifest + skill frontmatter; its one warning, about this CLAUDE.md, is expected
 claude --plugin-dir . -p "/coddy:next"      # run one skill headless against the working copy
 ```
@@ -82,7 +82,7 @@ Skill flow is `onboard` → `next` → `start <issue>` → `ship`, with `triage`
 ## Conventions
 
 - A hook blocks only on exit 2; any other non-zero exit is a non-blocking error. Hook paths in `bin/coddy` set `code=2` before `die`.
-- `bin/coddy` reads no `CLAUDE_*` variable and names no Claude Code path but the legacy config; anything Claude-specific goes in the shims under `scripts/`.
+- `bin/coddy` reads no `CLAUDE_*` variable and names no Claude Code path but the legacy config and, for `doctor`'s `version:`, `.claude-plugin/plugin.json`, the repository's one version source; anything Claude-specific goes in the shims under `scripts/`.
 - A Bash command that exits non-zero fires `PostToolUseFailure`, not `PostToolUse`, so `trip` is registered on both.
 - A hook that lets the call through but has something to tell Claude prints `{"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": "..."}}` and exits 0. It leaves `permissionDecision` out, so the normal permission flow still applies.
 - `${CLAUDE_PLUGIN_ROOT}` is expanded in skill bodies and in `allowed-tools`, so skills call scripts by that path.

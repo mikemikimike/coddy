@@ -477,6 +477,13 @@ touch "$tmp/binfile"
 t 1 "get.sh: a CODDY_BIN that is a file is refused" env HOME="$gh" CODDY_HOME="$tmp/h2" CODDY_BIN="$tmp/binfile" CODDY_REPO_URL="$tmp/coddy.git" bash "$here/get.sh"
 t 1 "get.sh: before any clone" test -e "$tmp/h2"
 t 0 "get.sh: a relative CODDY_HOME links to where it cloned" sh -c "cd '$tmp' && HOME='$gh' CODDY_HOME=relh CODDY_BIN=relb CODDY_REPO_URL='$tmp/coddy.git' bash '$here/get.sh' >/dev/null && test relb/coddy -ef relh/bin/coddy"
+t 0 "get.sh: a relative CODDY_REPO_URL matches on the rerun" sh -c "cd '$tmp' && for i in 1 2; do HOME='$gh' CODDY_HOME=relh3 CODDY_BIN=relb3 CODDY_REPO_URL=coddy.git bash '$here/get.sh' || exit 1; done | grep -q '^up to date: '"
+# The origin in another spelling of the same repository passes the origin check and reaches the fetch, which ssh=false stops.
+for o in 'git@GitHub.com:MNSami/Coddy.git' 'ssh://git@github.com/mnsami/coddy.git/'; do
+  git -C "$cs" remote set-url origin "$o"
+  url=https://github.com/mnsami/coddy GIT_SSH_COMMAND=false t 0 "get.sh: origin $o is the same repository" says 'could not fetch' get
+done
+git -C "$cs" remote set-url origin "$tmp/coddy.git"
 t 0 "doctor: from stdin says why it cannot" says 'not stdin' sh -c "bash -s doctor < '$here/bin/coddy'"
 # doctor names the install it runs from: get.sh's through the PATH link, another from a checkout.
 doc() { HOME="$gh" CODDY_HOME="$cs" "$@" doctor; }
@@ -486,5 +493,6 @@ t 0 "doctor: the installed commit" says "^commit: $(sha)\$" doc "$gh/bin/coddy"
 t 0 "doctor: the version" says "^version: $(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$here/.claude-plugin/plugin.json")\$" doc "$gh/bin/coddy"
 t 0 "doctor: from this checkout, via other" says '^via: other$' doc "$here/bin/coddy"
 t 0 "doctor: naming this checkout" says "^install: $(cd "$here" && pwd -P)\$" doc "$here/bin/coddy"
+t 0 "doctor: a CDPATH does not move it" sh -c "cd '$here' && CDPATH='$gh' HOME='$gh' bash bin/coddy doctor | grep -qx 'install: $(cd "$here" && pwd -P)'"
 
 exit $fail
