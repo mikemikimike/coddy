@@ -85,7 +85,8 @@ an agent without the plugin reads the rules), backing up any file it
 replaces under `.claude/coddy/backup/`, and then `.coddy.yml` (see
 [Config](#config)). It tells you what to set by hand so the default branch
 requires a pull request. A project that already has a config is sent to
-`/coddy:config`.
+`/coddy:migrate` when it is behind the current version, `/coddy:config`
+otherwise.
 
 ## Skills
 
@@ -95,7 +96,8 @@ The next `next` or `start` sweeps up what the merge left behind.
 | Skill | What it does |
 |---|---|
 | `/coddy:onboard` | A seven-step wizard: detects the project, installs `jq` and `jj` when you allow it, asks for what it can't infer (answers saved, so a re-run resumes), then writes the PR check workflow, the coddy block into `AGENTS.md` (backing up what it replaces) and `.coddy.yml` |
-| `/coddy:config [key=value ...]` | Shows `.coddy.yml`, or changes the keys you name; offers to move a config an earlier version wrote to `.claude/coddy.yml` |
+| `/coddy:config [key=value ...]` | Shows `.coddy.yml`, or changes the keys you name |
+| `/coddy:migrate` | Brings the config up to the current `version`, moving one an earlier version wrote to `.claude/coddy.yml` to `.coddy.yml`, after backing it up under `.claude/coddy/backup/` |
 | `/coddy:next` | Recommends the next issue from the tracker and the roadmap, setting aside issues in progress, assigned to someone else, or claimed on this machine |
 | `/coddy:start <issue> [onto <base-issue>]` | Fetches the issue, claims it, moves it to In Progress and gives it its own worktree in `.worktrees/<issue>`. Then reads beyond the ticket, thinks the work through with you, and asks for one approval of the plan with its difficulty tier. On a yes it implements on that tier's model, hardens the result twice, and loops code and security review until nothing at `review_block` or above is left (at most `review_rounds` rounds). Run it again to resume. Name a PR or branch, or let the issue's open PR be found: that branch instead. `onto` starts from another issue's branch instead of the default branch |
 | `/coddy:ship [issue]` | Runs `verify` in the issue's worktree, commits, pushes, opens the PR and links it back to the issue. Started `onto` another issue: the PR targets that issue's branch, so it shows only its own diff |
@@ -180,6 +182,7 @@ copy under `.claude/coddy/backup/`; commit it yourself. Its ceilings:
 by `/coddy:config`:
 
 ```yaml
+version: 1                   # schema version; set by /coddy:onboard and /coddy:migrate
 tracker: github              # github | jira
 repo: owner/name             # github only
 # jira:                      # jira only, in place of repo
@@ -204,7 +207,8 @@ review_rounds: 3             # optional; 1-5 (default 3)
 - `guard: warn` is described under the edit guard above. `/coddy:onboard`
   leaves the key out; set it with `/coddy:config guard=warn`.
 - `.claude/coddy.yml`, where earlier versions kept the config, is still read
-  while `.coddy.yml` is absent; `/coddy:config` offers to move it.
+  while `.coddy.yml` is absent; `/coddy:migrate` moves it. A config without
+  `version` is version 0; `/coddy:migrate` brings it up to date.
 - Delete the file yourself to leave the workflow (`.git/coddy`, where claims
   keep their records, can go with it). Every other skill
   refuses to run without the file.

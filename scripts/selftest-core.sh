@@ -147,6 +147,29 @@ t 1 "forget answers: and it is gone" test -e .claude/coddy/onboard-answers.json
 t 0 "forget answers: the backups stay" test -f .claude/coddy/backup/x
 CODDY_AGENT_DIR=.claude t 0 "forget answers: is quiet when the file is gone already" run forget answers
 rm -r .claude/coddy
+# migrate prints the config brought up to the current version and writes
+# nothing; /coddy:migrate writes it. No version is 0, wherever the file is.
+mv .coddy.yml "$tmp/live.yml"
+printf '# team config\ntracker: github   # the tracker\nworktree: git\n\ndefault_branch: main\nverify: test -f ok.txt\n' > .claude/coddy.yml
+{ echo 'version: 1'; cat .claude/coddy.yml; } > "$tmp/v1.yml"
+cp .claude/coddy.yml "$tmp/v0.yml"
+t 0 "migrate: a legacy file without version is 0" says '^from: 0$' run migrate
+t 0 "migrate: says it adds the version" says '^changed: add version: 1$' run migrate
+t 0 "migrate: and moves the legacy file" says '^changed: move .claude/coddy.yml -> .coddy.yml$' run migrate
+t 0 "migrate: the file after --- is the expected v1, comments kept" sh -c "'$here/bin/coddy' migrate | sed '1,/^---\$/d' | cmp -s - '$tmp/v1.yml'"
+t 0 "migrate: writes nothing" cmp -s .claude/coddy.yml "$tmp/v0.yml"
+t 1 "migrate: and makes no .coddy.yml" test -e .coddy.yml
+cp "$tmp/v1.yml" .coddy.yml
+t 0 "migrate: a v1 config next to a leftover legacy file says remove" says '^changed: remove .claude/coddy.yml$' run migrate
+t 1 "migrate: and prints no file" says '^---$' run migrate
+rm .claude/coddy.yml
+t 0 "migrate: a v1 config is current" says '^to: 1$' run migrate
+t 1 "migrate: and prints no change" says '^changed:' run migrate
+t 1 "migrate: nor a file" says '^---$' run migrate
+printf 'version: 99\ntracker: github\n' > .coddy.yml
+t 1 "migrate: a version above the current one is refused" run migrate
+t 0 "migrate: naming the plugin update" says 'update the coddy plugin' run migrate
+mv "$tmp/live.yml" .coddy.yml
 
 # Editing .coddy.yml is for the user to allow, in both guard modes; without
 # jq the guard cannot tell which path is edited and fails closed.

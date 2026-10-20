@@ -14,6 +14,7 @@
 #   coddy config | detect           the config, or NOT_ONBOARDED; facts about the project for onboarding
 #   coddy exclude answers | config  put the agent's coddy/ directory, or .coddy.yml, into git's info/exclude unless git ignores it already
 #   coddy forget answers            remove the agent's coddy/onboard-answers.json once the config is written
+#   coddy migrate                   the config brought up to the current schema version, for /coddy:migrate to write
 #   coddy guard                     PreToolUse hook on Edit/Write (hooks/hooks.json)
 #   coddy snap | trip               Pre/PostToolUse hooks on Bash
 # Inputs, all optional: CODDY_ROOT, where root resolution starts ($PWD
@@ -400,6 +401,27 @@ if [ "${1-}" = forget ]; then
   rm -f "$f" || die "could not remove $f"
   echo "removed: $f"; exit 0
 fi
+# The config brought up to the current schema version: from:, to:, one
+# changed: line per change, then --- and the migrated file, every line and
+# comment kept; no --- block when the file itself needs no change. Read-only:
+# a shell write to the config is undone by trip, so /coddy:migrate writes it
+# with the Write tool. No version is 0, the layout from before .coddy.yml.
+# Step m<n> takes the file on stdin from version n-1 to n, d<n> says what it
+# changed; the next schema change is one more pair and cur+1.
+m1() { echo "version: 1"; grep -v '^version:' || true; }
+d1="add version: 1"
+if [ "${1-}" = migrate ]; then
+  cur=1 v=$(cfg version); v="${v:-0}"
+  case "$v" in *[!0-9]*) die "version in $cname is not a whole number: $v" ;; esac
+  [ "$v" -le "$cur" ] || die "$cname is at version $v, newer than this coddy knows ($cur): update the coddy plugin"
+  echo "from: $v"; echo "to: $cur"
+  out=$(cat "$conf") n=$v
+  while [ "$n" -lt "$cur" ]; do n=$((n + 1)); out=$(printf '%s\n' "$out" | "m$n"); d="d$n"; echo "changed: ${!d}"; done
+  if [ "$cname" = "$legacy" ]; then echo "changed: move $legacy -> .coddy.yml"
+  elif [ -e "$legacy" ] || [ -L "$legacy" ]; then echo "changed: remove $legacy"; fi
+  { [ "$v" -lt "$cur" ] || [ "$cname" = "$legacy" ]; } || exit 0
+  echo "---"; printf '%s\n' "$out"; exit 0
+fi
 cmd="${1-}" issue="${2-}"
 [ "$cmd" = sweep ] || case "$issue" in ''|*[!A-Za-z0-9_-]*) die "issue id must look like 42 or ABC-123, got '$issue'" ;; esac
 wt=".worktrees/$issue" rec=".git/coddy/$issue.branch"
@@ -647,5 +669,5 @@ case "$cmd" in
         { grep -v "^$k=" "$f" 2>/dev/null; printf '%s=%s\n' "$k" "$v"; } > "$f.tmp" && mv "$f.tmp" "$f" || die "could not write $f"
       fi
     done ;;
-  *) die "usage: $self start|create <issue> <branch> [base-issue] | claim <issue> [--take] | ship|push <issue> [message] | state <issue> [key=value ...] | verify <issue> | diff <issue> | log <issue> <path>... | sweep | status | config | detect | exclude answers|config | forget answers | guard" ;;
+  *) die "usage: $self start|create <issue> <branch> [base-issue] | claim <issue> [--take] | ship|push <issue> [message] | state <issue> [key=value ...] | verify <issue> | diff <issue> | log <issue> <path>... | sweep | status | config | detect | exclude answers|config | forget answers | migrate | guard" ;;
 esac
