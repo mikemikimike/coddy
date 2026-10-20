@@ -494,6 +494,16 @@ done
 url=https://github.com/mnsami/coddy GIT_SSH_COMMAND=false gbin="$tmp/b6/bin" get >/dev/null 2>&1
 t 1 "get.sh: a failed fetch leaves no CODDY_BIN behind" test -e "$tmp/b6"
 git -C "$cs" remote set-url origin "$tmp/coddy.git"
+if [ "$(id -u)" != 0 ]; then # root writes anywhere
+  mkdir -p "$tmp/ro"; chmod 555 "$tmp/ro"
+  t 1 "get.sh: a CODDY_BIN it cannot write to is refused" env HOME="$gh" CODDY_HOME="$tmp/h8" CODDY_BIN="$tmp/ro" CODDY_REPO_URL="$tmp/coddy.git" bash "$here/get.sh"
+  t 1 "get.sh: before any clone" test -e "$tmp/h8"
+  chmod 555 "$gh/bin"
+  t 0 "get.sh: one already holding the link needs no write" says '^up to date: ' get
+  chmod 755 "$tmp/ro" "$gh/bin"
+fi
+t 0 "get.sh: a trailing / on CODDY_HOME is dropped" says "^cloned: $tmp/h9 at " env HOME="$gh" CODDY_HOME="$tmp/h9/" CODDY_BIN="$tmp/b9" CODDY_REPO_URL="$tmp/coddy.git" bash "$here/get.sh"
+t 0 "get.sh: from the link too" test "$(readlink "$tmp/b9/coddy")" = "$tmp/h9/bin/coddy"
 t 0 "doctor: from stdin says why it cannot" says 'not stdin' sh -c "bash -s doctor < '$here/bin/coddy'"
 # doctor names the install it runs from: get.sh's through the PATH link, another from a checkout.
 doc() { HOME="$gh" CODDY_HOME="$cs" "$@" doctor; }
@@ -506,5 +516,7 @@ t 0 "doctor: naming this checkout" says "^install: $(cd "$here" && pwd -P)\$" do
 t 0 "doctor: with no HOME" says '^via: other$' env -u HOME -u CODDY_HOME "$here/bin/coddy" doctor
 t 1 "doctor: and no unbound variable" says 'unbound' env -u HOME -u CODDY_HOME "$here/bin/coddy" doctor
 t 0 "doctor: a CDPATH does not move it" sh -c "cd '$here' && CDPATH='$gh' HOME='$gh' bash bin/coddy doctor | grep -qx 'install: $(cd "$here" && pwd -P)'"
+mkdir -p "$tmp/dl/real/bin" "$tmp/dl/x"; cp "$here/bin/coddy" "$tmp/dl/real/bin/"; ln -s ../real/bin "$tmp/dl/x/bin"
+t 0 "doctor: through a linked bin/, the real install dir" says "^install: $(cd "$tmp/dl/real" && pwd -P)\$" "$tmp/dl/x/bin/coddy" doctor
 
 exit $fail

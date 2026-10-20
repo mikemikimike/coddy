@@ -15,6 +15,7 @@ main() {
   case "$home" in /*) ;; *) home="$PWD/$home" ;; esac
   case "$bin" in /*) ;; *) bin="$PWD/$bin" ;; esac
   bin="${bin%"${bin##*[!/]}"}" # no trailing /, so the PATH check below matches
+  home="${home%"${home##*[!/]}"}" # nor in the link's target and the paths printed
   # git records a relative local repository by its absolute path; so does this, or a rerun would not match it.
   case "$url" in /*|*://*|[!/]*@*:*) ;; *) [ ! -e "$url" ] || url="$PWD/$url" ;; esac
   # A GIT_DIR or GIT_CONFIG_* from the caller would point git at another repository or config.
@@ -54,7 +55,8 @@ main() {
   fi
   # CODDY_BIN is made only once the checkout is in place, so a failed clone or fetch leaves none behind.
   a=$bin; while [ ! -e "$a" ] && [ ! -L "$a" ]; do a=${a%/*}; a=${a:-/}; done
-  [ -d "$a" ] && { [ "$a" = "$bin" ] || [ -w "$a" ]; } || die "could not create $bin: make it a directory, then run this again"
+  # Write access is needed unless the link is there already (checked above).
+  [ -d "$a" ] && { [ -L "$link" ] || [ -w "$a" ]; } || die "could not create $bin or link coddy in it: make it a directory you can write to, then run this again"
 
   if [ -e "$home" ]; then
     sha=$(git -C "$home" rev-parse -q --verify --short HEAD)
