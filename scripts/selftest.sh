@@ -475,8 +475,8 @@ for d in "" /sub/dir /.worktrees/43 /.claude/worktrees/x; do t 0 "root: resolved
 git worktree remove --force .claude/worktrees/x; rm -r sub
 # A .claude/settings.json env overrides CLAUDE_PROJECT_DIR in the Bash tool's
 # environment (the hooks get the real one), so a cloned repository could move
-# the root: every shim takes it only while the working directory is it or
-# under it, compared by real path, and PWD cannot be set from there.
+# the root: every shim takes it, for a Bash-tool verb, only while the working
+# directory is it or under it, compared by real path, and PWD cannot be set from there.
 # from <dir> <CLAUDE_PROJECT_DIR> <root>: run there, every shim resolves that root
 from() { (cd "$1" && export CLAUDE_PROJECT_DIR=$2 && bash "$here/scripts/issue.sh" status | grep -qx "root: $3" && bash "$here/scripts/detect.sh" | grep -qx "root: $3" && { [ "$3" != "$repo" ] || bash "$here/scripts/config.sh" | grep -q '^tracker:'; } && { [ "$3" = "$repo" ] || bash "$here/scripts/config.sh" | grep -qx NOT_ONBOARDED; }); }
 mkdir "$tmp/other" "$tmp/repo2"; ln -s "$repo" "$tmp/link"
@@ -486,6 +486,20 @@ t 0 "shim: so is a relative one" from "$repo" .. "$repo"
 t 0 "shim: one above the working directory is honoured" from "$repo" "$tmp" "$tmp"
 t 0 "shim: one naming the working directory by its real path is honoured" from "$tmp/link" "$repo" "$repo"
 rm -r "$tmp/other" "$tmp/repo2" "$tmp/link"
+# The hooks get the real CLAUDE_PROJECT_DIR while their working directory
+# follows the Bash tool's cd, so guard, snap and trip take it as it is: held
+# to the working directory, a cd out of the project would drop the root, and
+# every guardrail with it.
+# away <command...>: run from outside the project, as a hook runs after that cd
+away() { (cd "$tmp" && "$@"); }
+# asks <path>: guard exits 0 and asks the user, as hook JSON
+asks() { out=$(guard "$1") && printf %s "$out" | jq -e '.hookSpecificOutput | .hookEventName == "PreToolUse" and .permissionDecision == "ask"'; }
+t 2 "hook: guard after a cd out of the project blocks the main checkout" away guard "$repo/README.md"
+t 0 "hook: and asks on .coddy.yml" away asks "$repo/.coddy.yml"
+away wire snap w; echo x > stray.txt; t 2 "hook: trip after a cd out of the project reports a stray write" away wire trip w; rm stray.txt
+away wire snap w; rm .claude/coddy.yml; t 2 "hook: trip after a cd out of the project restores a deleted config" away wire trip w
+t 0 "hook: and the config came back" same
+wire snap w; t 0 "hook: a cd out of the project is not a change" away wire trip w
 # detect <line> [VAR=value...]: detect.sh prints exactly that line
 detect() { line=$1; shift; env CLAUDE_PROJECT_DIR="$repo" "$@" "$BASH" "$here/scripts/detect.sh" 2>/dev/null | grep -qx "$line"; }
 t 0 "detect.sh reports an installed jq" detect 'jq: installed'
