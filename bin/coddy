@@ -402,28 +402,38 @@ if [ "${1-}" = forget ]; then
   echo "removed: $f"; exit 0
 fi
 # The config brought up to the current schema version: from:, to:, one
-# changed: line per change (tracked: after a move), then --- and the migrated file, every line and
+# changed: line per change (tracked: after a move, legacy: file|link|dir|other
+# after a remove), then --- and the migrated file, every line and
 # comment kept; no --- block when the file itself needs no change. Read-only:
 # a shell write to the config is undone by trip, so /coddy:migrate writes it
 # with the Write tool. No version is 0, the layout from before .coddy.yml.
 # Step m<n> takes the file on stdin from version n-1 to n, d<n> says what it
 # changed; the next schema change is one more pair and cur+1.
-m1() { echo "version: 1"; grep -v '^version:' || true; }
+# m1 puts version after a leading --- marker and ends it as the file's first line ends (CRLF).
+m1() { awk 'NR == 1 { e = /\r$/ ? "\r" : ""; if (/^---\r?$/) { print; print "version: 1" e; next }; print "version: 1" e }; !/^version:/; END { if (!NR) print "version: 1" }'; }
 d1="add version: 1"
 if [ "${1-}" = migrate ]; then
-  cur=1 v=$(cfg version | tr -d '\r'); v="${v:-0}"
+  # The skill Reads and Writes these paths, which follow a link: only plain files.
+  { [ -L .coddy.yml ] || { [ -e .coddy.yml ] && [ ! -f .coddy.yml ]; }; } && die ".coddy.yml is a link or not a plain file: replace it with the config itself by hand"
+  [ "$cname" != "$legacy" ] || [ ! -L "$legacy" ] || die "$legacy is a link: replace it with the config itself by hand"
+  cur=1 v=$(cfg version | tr -d '[:space:]'); v=${v#"${v%%[!0]*}"}; v="${v:-0}"
   case "$v" in *[!0-9]*) die "version in $cname is not a whole number: $v" ;; esac
-  [ "$v" -le "$cur" ] || die "$cname is at version $v, newer than this coddy knows ($cur): update the coddy plugin"
+  # by length first, so a number too long for bash is refused without its error
+  { [ "${#v}" -le 9 ] && [ "$v" -le "$cur" ]; } || die "$cname is at version $v, newer than this coddy knows ($cur): update the coddy plugin"
   echo "from: $v"; echo "to: $cur"
-  out=$(cat "$conf") n=$v
-  while [ "$n" -lt "$cur" ]; do n=$((n + 1)); out=$(printf '%s\n' "$out" | "m$n"); d="d$n"; echo "changed: ${!d}"; done
+  # the x keeps the file's trailing blank lines through each $(...)
+  out=$(cat "$conf"; echo x) n=$v; out=${out%x}
+  while [ "$n" -lt "$cur" ]; do n=$((n + 1)); out=$(printf '%s' "$out" | "m$n"; echo x); out=${out%x}; d="d$n"; echo "changed: ${!d}"; done
   # tracked: whether git tracks the legacy file, so the skill keeps a personal
   # config personal without a git rule of its own in allowed-tools.
   if [ "$cname" = "$legacy" ]; then echo "changed: move $legacy -> .coddy.yml"
     if git ls-files --error-unmatch -- "$legacy" >/dev/null 2>&1; then echo "tracked: yes"; else echo "tracked: no"; fi
-  elif [ -e "$legacy" ] || [ -L "$legacy" ]; then echo "changed: remove $legacy"; fi
+  elif [ -e "$legacy" ] || [ -L "$legacy" ]; then echo "changed: remove $legacy"
+    # legacy: its kind, so the skill backs up a file, removes a link unread and leaves the rest to the user
+    if [ -L "$legacy" ]; then echo "legacy: link"; elif [ -f "$legacy" ]; then echo "legacy: file"; elif [ -d "$legacy" ]; then echo "legacy: dir"; else echo "legacy: other"; fi
+  fi
   { [ "$v" -lt "$cur" ] || [ "$cname" = "$legacy" ]; } || exit 0
-  echo "---"; printf '%s\n' "$out"; exit 0
+  echo "---"; printf '%s' "$out"; exit 0
 fi
 cmd="${1-}" issue="${2-}"
 [ "$cmd" = sweep ] || case "$issue" in ''|*[!A-Za-z0-9_-]*) die "issue id must look like 42 or ABC-123, got '$issue'" ;; esac
