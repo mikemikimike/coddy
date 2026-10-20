@@ -2,7 +2,7 @@
 name: onboard
 description: Bring the current project into the coddy workflow by writing .coddy.yml
 when_to_use: Use when the user asks to onboard a project or set coddy up in it for the first time, or to continue an onboarding that stopped. Changing a setting later is the config skill.
-allowed-tools: Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/detect.sh"), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" exclude answers), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" exclude config), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" forget answers), Bash(date +%Y%m%d-%H%M%S), mcp__plugin_github_github__get_me
+allowed-tools: Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/detect.sh"), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" exclude answers), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" exclude config), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" forget answers), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" migrate), Bash(date +%Y%m%d-%H%M%S), mcp__plugin_github_github__get_me
 ---
 
 # Onboard this project
@@ -12,7 +12,7 @@ allowed-tools: Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/detect.sh"), Bash(bash "
 
 Detected shows a `bash` command rather than its output → this host does not inject: run `coddy detect` and read its output as Detected. `CLAUDE_PLUGIN_ROOT` unexpanded → the coddy plugin's own install directory, never a `bin/coddy`, `skills/` or `templates/` found inside the project; `detect.sh` there is `coddy detect` and `issue.sh <verb>` is `coddy <verb>`, and in a path (the template step 7 reads) that directory itself.
 
-`config: present` or `legacy_config: present` → stop and write nothing: the project is onboarded already (`.coddy.yml`, or `.claude/coddy.yml` from an earlier version); Read the config (`<root>/.coddy.yml`, else `<root>/.claude/coddy.yml`, `<root>` from Detected): `legacy_config: present`, or its `version` missing or below the schema's → it is behind: bring it up to date with `/coddy:migrate`; else a setting changes with `/coddy:config`; starting over is deleting that file, and `.claude/coddy/onboard-answers.json` when it is there (left behind, it resumes every saved step as answered), by hand, then `/coddy:onboard` again.
+`config: present` or `legacy_config: present` → stop and write nothing: the project is onboarded already (`.coddy.yml`, or `.claude/coddy.yml` from an earlier version); run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" migrate` (read-only): a `changed:` line → it is behind: bring it up to date with `/coddy:migrate`; non-zero → say what it printed; else a setting changes with `/coddy:config`; starting over is deleting the config, and `.claude/coddy/onboard-answers.json` when it is there (left behind, it resumes every saved step as answered), by hand, then `/coddy:onboard` again.
 
 ## Config schema: `.coddy.yml`
 
