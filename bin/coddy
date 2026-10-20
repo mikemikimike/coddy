@@ -12,6 +12,8 @@
 #   coddy sweep                     remove what issues with a merged PR left behind
 #   coddy status                    the root, the config path and the claimed worktrees, for the prompts
 #   coddy config | detect           the config, or NOT_ONBOARDED; facts about the project for onboarding
+#   coddy exclude answers | config  put the agent's coddy/ directory, or .coddy.yml, into git's info/exclude unless git ignores it already
+#   coddy forget answers            remove the agent's coddy/onboard-answers.json once the config is written
 #   coddy guard                     PreToolUse hook on Edit/Write (hooks/hooks.json)
 #   coddy snap | trip               Pre/PostToolUse hooks on Bash
 # Inputs, all optional: CODDY_ROOT, where root resolution starts ($PWD
@@ -72,26 +74,41 @@ kind() { if [ -f "$1" ]; then echo file; elif [ -d "$1" ]; then echo dir; elif [
 # only asks about what it cannot infer. Read-only and never fails loudly.
 if [ "${1-}" = detect ]; then
   cd "$root" || exit 0
+  echo "root: $root"
   echo "config: $([ -f "$conf" ] && echo present || echo none)"
   echo "legacy_config: $([ -f "$legacy" ] && echo present || echo none)"
   echo "remote: $(git remote get-url origin 2>/dev/null || echo none)"
   echo "jj: $(command -v jj >/dev/null 2>&1 && echo installed || echo missing)"
   echo "jq: $(command -v jq >/dev/null 2>&1 && echo installed || echo missing)"
+  # Where this runs and the first package manager on PATH: onboard's install
+  # command for a missing jq or jj is keyed on pkg.
+  case "$(uname -s 2>/dev/null)" in Darwin) o=macos ;; Linux) o=linux ;; CYGWIN*|MINGW*|MSYS*|Windows_NT) o=windows ;; *) o=unknown ;; esac
+  echo "os: $o"
+  p=none; for x in brew apt-get dnf winget; do command -v "$x" >/dev/null 2>&1 && { p=$x; break; }; done
+  echo "pkg: $p"
   b=$( (git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || echo origin/main) | sed 's#^origin/##')
   echo "default_branch: $b"
-  echo "pr_check: $([ -f .github/workflows/coddy.yml ] && echo present || echo none)"
   # A link at AGENTS.md, to a file or dangling, reads as symlink before kind
   # would read through it: onboard writes its block into a plain file alone,
   # since no hook is live before the config and a write through a link lands
-  # wherever it points.
+  # wherever it points. The PR check's path the same way, a link at .github
+  # or .github/workflows included; a plain file is present, nothing is none.
+  w=.github/workflows/coddy.yml
+  c=$( { [ -L .github ] || [ -L .github/workflows ] || [ -L "$w" ]; } && echo symlink || kind "$w")
+  case "$c" in file) c=present ;; absent) c=none ;; esac
+  echo "pr_check: $c"
   echo "agents_md: $([ -L AGENTS.md ] && echo symlink || kind AGENTS.md)"
+  # Each value read from the repository is one line: a script name, a
+  # directory name or a commit subject holding a line break would add a
+  # line of its own, root: included, which every onboard path is spelled
+  # from. A ref name cannot hold one.
   echo "make_targets: $(grep -ohE '^[A-Za-z][A-Za-z0-9_-]*:' Makefile 2>/dev/null | tr -d : | tr '\n' ' ')"
-  echo "package_scripts: $(jq -r '.scripts // {} | keys | join(" ")' package.json 2>/dev/null)"
-  echo "go_modules: $(ls go.mod */go.mod 2>/dev/null | tr '\n' ' ')"
+  echo "package_scripts: $(jq -r '.scripts // {} | keys | join(" ")' package.json 2>/dev/null | tr '\n\r' '  ')"
+  echo "go_modules: $(ls go.mod */go.mod 2>/dev/null | tr '\n\r' '  ')"
   echo "roadmap: $(ls ROADMAP.md docs/ROADMAP.md .planning/ROADMAP.md 2>/dev/null | tr '\n' ' ')"
   echo "config_ignored: $(git check-ignore -q .coddy.yml 2>/dev/null && echo yes || echo no)"
   echo "recent_commits:"
-  git log --format='  %s' -n 15 2>/dev/null
+  git log --format='  %s' -n 15 2>/dev/null | tr '\r' ' '
   echo "recent_branches:"
   git for-each-ref --sort=-committerdate --format='  %(refname:short)' refs/heads refs/remotes 2>/dev/null | grep -v HEAD | head -8
   exit 0
@@ -123,6 +140,25 @@ mine() { [ "$sid" = "$me" ] || { [ -n "$pid" ] && [ "$pid" = "${CODDY_PID-}" ] &
 owner() { own=$(cat "$root/.git/coddy/$1/owner" 2>/dev/null); read -r sid pid start _ <<<"$own"; }
 # This session's owner line.
 myline() { echo "$me ${CODDY_PID-} $(started "${CODDY_PID-}")"; }
+
+# Onboarding's one write outside the agent dir, here so the skill's command
+# text holds no path and no wildcard: the agent's coddy/ directory (answers,
+# backups) or .coddy.yml (a personal config) goes into git's info/exclude,
+# unless git ignores it already. The directory pattern has no trailing
+# slash: a directory-only pattern does not match the path while the
+# directory is absent, and the line would be added on every run.
+if [ "${1-}" = exclude ]; then
+  case "${2-}" in
+    answers) [ -n "${CODDY_AGENT_DIR-}" ] || die "exclude answers needs CODDY_AGENT_DIR"; p="$CODDY_AGENT_DIR/coddy" ;;
+    config) p=.coddy.yml ;;
+    *) die "usage: $self exclude answers|config" ;;
+  esac
+  cd "$root" || die "cannot enter $root"
+  git check-ignore -q "$p" 2>/dev/null && { echo "ignored already: $p"; exit 0; }
+  # A last line without its newline would take the pattern as its tail.
+  x=$(git rev-parse --git-path info/exclude 2>/dev/null) && mkdir -p "${x%/*}" && { [ ! -s "$x" ] || [ -z "$(tail -c1 "$x")" ] || echo; echo "$p"; } >> "$x" || die "could not write $p to git's info/exclude"
+  echo "excluded: $p"; exit 0
+fi
 
 # The project root and its claimed issue worktrees, injected by /coddy:start,
 # /coddy:ship, /coddy:config and /coddy:next. A directory under .worktrees/
@@ -266,8 +302,11 @@ snap() {
 
 if [ "${1-}" = snap ] || [ "${1-}" = trip ]; then
   # The snapshot is named by the tool use; an id that is not a plain word
-  # reads as none, so it cannot name a path outside TMPDIR.
-  id=$(jq -r '.tool_use_id // empty' 2>/dev/null)
+  # reads as none, so it cannot name a path outside TMPDIR. Read without jq:
+  # onboard installs jq inside one command, so snap runs without it and trip
+  # with it, and the name must come out the same on both sides. Inside a JSON
+  # string a quote is escaped, so a bare "tool_use_id" is a key, never text.
+  id=$(sed -n 's/.*"tool_use_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' 2>/dev/null | head -n1)
   case "$id" in ''|*[!A-Za-z0-9_-]*) id=shared ;; esac
   file="${TMPDIR:-/tmp}/coddy-snap-$(printf %s "$root" | cksum | cut -d' ' -f1)-$id"
   # Both config paths are kept, present or not: a .coddy.yml the command
@@ -352,6 +391,15 @@ fi
 
 [ -f "$conf" ] || { [ "${1-}" = sweep ] && exit 0; die "NOT_ONBOARDED"; }
 cd "$root" || die "cannot enter $root"
+# The answers onboarding saved go once the config is written, and only then
+# (above: NOT_ONBOARDED before); starting over is removing the file by hand.
+if [ "${1-}" = forget ]; then
+  [ "${2-}" = answers ] || die "usage: $self forget answers"
+  [ -n "${CODDY_AGENT_DIR-}" ] || die "forget answers needs CODDY_AGENT_DIR"
+  f="$CODDY_AGENT_DIR/coddy/onboard-answers.json"
+  rm -f "$f" || die "could not remove $f"
+  echo "removed: $f"; exit 0
+fi
 cmd="${1-}" issue="${2-}"
 [ "$cmd" = sweep ] || case "$issue" in ''|*[!A-Za-z0-9_-]*) die "issue id must look like 42 or ABC-123, got '$issue'" ;; esac
 wt=".worktrees/$issue" rec=".git/coddy/$issue.branch"
@@ -599,5 +647,5 @@ case "$cmd" in
         { grep -v "^$k=" "$f" 2>/dev/null; printf '%s=%s\n' "$k" "$v"; } > "$f.tmp" && mv "$f.tmp" "$f" || die "could not write $f"
       fi
     done ;;
-  *) die "usage: $self start|create <issue> <branch> [base-issue] | claim <issue> [--take] | ship|push <issue> [message] | state <issue> [key=value ...] | verify <issue> | diff <issue> | log <issue> <path>... | sweep | status | config | detect | guard" ;;
+  *) die "usage: $self start|create <issue> <branch> [base-issue] | claim <issue> [--take] | ship|push <issue> [message] | state <issue> [key=value ...] | verify <issue> | diff <issue> | log <issue> <path>... | sweep | status | config | detect | exclude answers|config | forget answers | guard" ;;
 esac

@@ -47,7 +47,10 @@ You also need:
 
 - `jq`. The edit guard needs it and blocks every edit without it.
 - `jj` ([Jujutsu](https://jj-vcs.github.io)), unless you pick `worktree: git`
-  at onboarding.
+  at onboarding. `/coddy:onboard` installs either one that is missing
+  (Homebrew, apt-get, dnf or winget) through a shell command you allow;
+  `jj` has no apt-get package, so there it names the install page and
+  recommends `worktree: git`.
 - For GitHub Issues: the GitHub plugin, enabled and signed in with a token
   that can read and write the repository's issues and pull requests.
 - For Jira: the Atlassian plugin.
@@ -70,11 +73,19 @@ own environment.
 
 ## Onboard a project
 
-Run `/coddy:onboard` inside the project. It detects what it can, asks for
-the rest, writes the coddy block into `AGENTS.md` (so an agent without the
-plugin reads the rules) and then `.coddy.yml` (see [Config](#config)). It also
-offers to copy the PR check workflow into the project, and tells you what to
-set by hand so the default branch requires a pull request.
+Run `/coddy:onboard` inside the project. It is a wizard of seven steps,
+`checks → tracker → branch → verify → tiers → AGENTS.md → review`, with an
+agenda before each and at most one question per step. It detects what it
+can and asks for the rest; a missing `jq` or `jj` is installed through a
+shell command you allow (declining `jq` stops it, declining `jj` picks
+`worktree: git`). Your answers are saved under `.claude/coddy/`, so a run
+that stops resumes where it was. At review it shows the config and, on your
+yes, writes the PR check workflow and the coddy block into `AGENTS.md` (so
+an agent without the plugin reads the rules), backing up any file it
+replaces under `.claude/coddy/backup/`, and then `.coddy.yml` (see
+[Config](#config)). It tells you what to set by hand so the default branch
+requires a pull request. A project that already has a config is sent to
+`/coddy:config`.
 
 ## Skills
 
@@ -83,7 +94,7 @@ The next `next` or `start` sweeps up what the merge left behind.
 
 | Skill | What it does |
 |---|---|
-| `/coddy:onboard` | Detects the project, asks for what it can't infer, writes the coddy block into `AGENTS.md` and then `.coddy.yml` |
+| `/coddy:onboard` | A seven-step wizard: detects the project, installs `jq` and `jj` when you allow it, asks for what it can't infer (answers saved, so a re-run resumes), then writes the PR check workflow, the coddy block into `AGENTS.md` (backing up what it replaces) and `.coddy.yml` |
 | `/coddy:config [key=value ...]` | Shows `.coddy.yml`, or changes the keys you name; offers to move a config an earlier version wrote to `.claude/coddy.yml` |
 | `/coddy:next` | Recommends the next issue from the tracker and the roadmap, setting aside issues in progress, assigned to someone else, or claimed on this machine |
 | `/coddy:start <issue> [onto <base-issue>]` | Fetches the issue, claims it, moves it to In Progress and gives it its own worktree in `.worktrees/<issue>`. Then reads beyond the ticket, thinks the work through with you, and asks for one approval of the plan with its difficulty tier. On a yes it implements on that tier's model, hardens the result twice, and loops code and security review until nothing at `review_block` or above is left (at most `review_rounds` rounds). Run it again to resume. Name a PR or branch, or let the issue's open PR be found: that branch instead. `onto` starts from another issue's branch instead of the default branch |
@@ -150,11 +161,12 @@ Open and assigned is what holds from `/coddy:start` to the merge.
 The `in progress` label comes off when the PR opens, and the check runs
 again on every push. It is keyed on the closing reference, not the branch
 name. So it is the one layer that holds for a cloud agent, or for any
-branch coddy did not name. `/coddy:onboard` offers to copy it to
-`.github/workflows/coddy.yml`, or copy the file yourself. Its ceilings:
+branch coddy did not name. `/coddy:onboard` writes it to
+`.github/workflows/coddy.yml` on a GitHub tracker, backing up a differing
+copy under `.claude/coddy/backup/`; commit it yourself. Its ceilings:
 
 - GitHub Issues only. A Jira project gets the local guardrails alone:
-  `/coddy:onboard` does not offer the check, and a copied one fails every
+  `/coddy:onboard` does not write the check, and a copied one fails every
   Jira PR, which carries no closing reference.
 - GitHub computes the references only on a PR against the default branch.
   On a PR stacked on another branch, the check reads the closing keywords
