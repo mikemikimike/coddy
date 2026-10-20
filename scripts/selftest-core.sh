@@ -420,4 +420,62 @@ t 0 "status lists the claimed issue as mine" says '^owners: 1=me' run status
 t 0 "sweep keeps the unmerged worktree" sh -c "'$here/bin/coddy' sweep; test -d '$repo/.worktrees/1'"
 t 0 "the whole flow left the main checkout alone" wire trip flow
 
+# get.sh installs main from CODDY_REPO_URL into CODDY_HOME and links coddy
+# into CODDY_BIN, run as curl pipes it (the script on stdin), with no network.
+src="$tmp/src" gh="$tmp/gethome"; cs="$gh/.coddy"
+git init -q "$src"; git -C "$src" checkout -q -b main
+mkdir -p "$src/bin" "$src/.claude-plugin" "$gh" "$tmp/root"
+cp "$here/bin/coddy" "$src/bin/"; cp "$here/.claude-plugin/plugin.json" "$src/.claude-plugin/"; echo x > "$src/README.md"
+git -C "$src" add -A; git -C "$src" commit -q -m init; git clone -q --bare "$src" "$tmp/coddy.git"
+upstream() { echo "$1" > "$src/$2"; git -C "$src" add -A; git -C "$src" commit -q -m "$1"; git -C "$src" push -q "$tmp/coddy.git" main; }
+get() { HOME="$gh" CODDY_HOME="$cs" CODDY_BIN="$gh/bin" CODDY_REPO_URL="${url-$tmp/coddy.git}" PATH="${gpath-$PATH}" bash -s < "$here/get.sh"; }
+sha() { git -C "$cs" rev-parse --short HEAD; }
+printf '#!/bin/sh\necho 0\n' > "$tmp/root/id"; chmod +x "$tmp/root/id"
+gpath="$tmp/root:$PATH" t 1 "get.sh: refuses root" get
+t 1 "get.sh: and touches nothing" test -e "$cs"
+mkdir "$gh/bin"; echo mine > "$gh/bin/coddy"
+t 1 "get.sh: a coddy in CODDY_BIN that is not its link is refused" get
+t 0 "get.sh: before any clone" sh -c "! test -e '$cs' && grep -qx mine '$gh/bin/coddy'"
+rm "$gh/bin/coddy"
+t 0 "get.sh: a first run clones" says "^cloned: $cs at " get
+t 0 "get.sh: on main" test "$(git -C "$cs" branch --show-current)" = main
+t 0 "get.sh: links coddy into CODDY_BIN" test "$gh/bin/coddy" -ef "$cs/bin/coddy"
+t 0 "get.sh: prints the commit" says "at $(sha)\$" get
+t 0 "get.sh: and the next step per agent" says 'claude plugin install coddy@coddy' get
+t 0 "get.sh: for other agents too" says "$cs/skills/onboard/SKILL.md" get
+t 0 "get.sh: a rerun is up to date" says "^up to date: $cs at $(sha)\$" get
+t 0 "get.sh: CODDY_BIN off PATH prints the line to add" says "export PATH=\"$gh/bin:" get
+gpath="$gh/bin:$PATH" t 1 "get.sh: and on PATH does not" says 'export PATH=' get
+t 0 "get.sh: and edits no rc file" sh -c "! ls -A '$gh' | grep -q '^\.[a-z]*rc\$\|profile'"
+upstream two README.md
+t 0 "get.sh: a new remote commit fast-forwards" says "^updated: $cs at $(git -C "$src" rev-parse --short HEAD)\$" get
+upstream three README.md; was=$(sha)
+echo edited >> "$cs/README.md"
+t 1 "get.sh: an edited tracked file is refused" get
+t 0 "get.sh: and left as it was" sh -c "grep -qx edited '$cs/README.md' && test \"\$(git -C '$cs' rev-parse --short HEAD)\" = $was"
+git -C "$cs" checkout -q -- README.md; git -C "$cs" checkout -q -b topic
+t 1 "get.sh: another branch is refused" get
+t 0 "get.sh: and left on it" test "$(git -C "$cs" branch --show-current)" = topic
+git -C "$cs" checkout -q main
+url="$tmp/other.git" t 1 "get.sh: another origin is refused" get
+t 0 "get.sh: and left as it was" test "$(sha)" = "$was"
+url="$tmp/coddy.git/" t 0 "get.sh: an origin spelled with a trailing / is accepted" get
+upstream four README.md
+url="$tmp/coddy" t 0 "get.sh: and one without .git" get
+upstream five README.md; echo scratch > "$cs/scratch.txt"
+t 0 "get.sh: an untracked file does not block" says '^updated: ' get
+upstream six new.txt; echo mine > "$cs/new.txt"; was=$(sha)
+t 1 "get.sh: an untracked file in the merge's way stops it" get
+t 0 "get.sh: showing git's message" says 'untracked' get
+t 0 "get.sh: and left as it was" sh -c "grep -qx mine '$cs/new.txt' && test \"\$(git -C '$cs' rev-parse --short HEAD)\" = $was"
+rm "$cs/new.txt"; get >/dev/null 2>&1
+# doctor names the install it runs from: get.sh's through the PATH link, another from a checkout.
+doc() { HOME="$gh" CODDY_HOME="$cs" "$@" doctor; }
+t 0 "doctor: through the link, the real install dir" says "^install: $(cd "$cs" && pwd -P)\$" doc "$gh/bin/coddy"
+t 0 "doctor: via get.sh" says '^via: get.sh$' doc "$gh/bin/coddy"
+t 0 "doctor: the installed commit" says "^commit: $(sha)\$" doc "$gh/bin/coddy"
+t 0 "doctor: the version" says "^version: $(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$here/.claude-plugin/plugin.json")\$" doc "$gh/bin/coddy"
+t 0 "doctor: from this checkout, via other" says '^via: other$' doc "$here/bin/coddy"
+t 0 "doctor: naming this checkout" says "^install: $(cd "$here" && pwd -P)\$" doc "$here/bin/coddy"
+
 exit $fail

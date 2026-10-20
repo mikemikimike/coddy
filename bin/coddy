@@ -15,6 +15,7 @@
 #   coddy exclude answers | config  put the agent's coddy/ directory, or .coddy.yml, into git's info/exclude unless git ignores it already
 #   coddy forget answers            remove the agent's coddy/onboard-answers.json once the config is written
 #   coddy migrate                   the config brought up to the current schema version, for /coddy:migrate to write
+#   coddy doctor                    the install this runs from: its directory, how it got there, version and commit
 #   coddy guard                     PreToolUse hook on Edit/Write (hooks/hooks.json)
 #   coddy snap | trip               Pre/PostToolUse hooks on Bash
 # Inputs, all optional: CODDY_ROOT, where root resolution starts ($PWD
@@ -39,6 +40,23 @@
 # snap and trip fingerprint the main checkout around each shell command and
 # reject the command's result when it left new changes there.
 set -u
+
+# The install this runs from, needing no project: its real directory, through
+# a PATH link or a shim that sources it; get.sh's when that is CODDY_HOME.
+if [ "${1-}" = doctor ]; then
+  p="${BASH_SOURCE[0]}" i=0
+  case "$p" in */*) ;; *) p="./$p" ;; esac
+  while [ -L "$p" ] && [ "$i" -lt 40 ]; do t=$(readlink "$p"); case "$t" in /*) p=$t ;; *) p="${p%/*}/$t" ;; esac; i=$((i+1)); done
+  d=$(cd "${p%/*}/.." && pwd -P) || exit 1
+  h=$(cd "${CODDY_HOME:-$HOME/.coddy}" 2>/dev/null && pwd -P)
+  v=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$d/.claude-plugin/plugin.json" 2>/dev/null | head -1)
+  c=""; [ ! -e "$d/.git" ] || c=$(git -C "$d" rev-parse --short HEAD 2>/dev/null)
+  echo "install: $d"
+  echo "via: $([ "$d" = "$h" ] && echo get.sh || echo other)"
+  echo "version: ${v:-unknown}"
+  echo "commit: ${c:-none}"
+  exit 0
+fi
 
 # The project's main checkout, from CODDY_ROOT or the working directory: the
 # root, a subdirectory, an issue worktree (git or jj, whose workspace has no
@@ -682,5 +700,5 @@ case "$cmd" in
         { grep -v "^$k=" "$f" 2>/dev/null; printf '%s=%s\n' "$k" "$v"; } > "$f.tmp" && mv "$f.tmp" "$f" || die "could not write $f"
       fi
     done ;;
-  *) die "usage: $self start|create <issue> <branch> [base-issue] | claim <issue> [--take] | ship|push <issue> [message] | state <issue> [key=value ...] | verify <issue> | diff <issue> | log <issue> <path>... | sweep | status | config | detect | exclude answers|config | forget answers | migrate | guard" ;;
+  *) die "usage: $self start|create <issue> <branch> [base-issue] | claim <issue> [--take] | ship|push <issue> [message] | state <issue> [key=value ...] | verify <issue> | diff <issue> | log <issue> <path>... | sweep | status | config | detect | exclude answers|config | forget answers | migrate | doctor | guard" ;;
 esac

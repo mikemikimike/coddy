@@ -38,10 +38,26 @@ the issue and given it a worktree. A hook enforces that, not the prompt.
 
 ## Install
 
+In Claude Code, as a plugin:
+
 ```bash
 claude plugin marketplace add mnsami/coddy   # or a local path to this repo
 claude plugin install coddy@coddy
 ```
+
+For another agent (Codex, Cursor, Copilot CLI, Gemini CLI) or your own
+terminal:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mnsami/coddy/main/get.sh | bash
+```
+
+It clones `main` into `~/.coddy` (a rerun fast-forwards it, and stops on
+local changes to tracked files), links `coddy` into `~/.local/bin` and
+prints the line to add when that is not on your `PATH`. Your agent reads
+the skills as Markdown from `~/.coddy/skills/`, starting with
+`onboard/SKILL.md`. `coddy doctor` says which install a `coddy` runs from.
+The plugin keeps its own copy and does not use `~/.coddy`.
 
 You also need:
 
@@ -63,8 +79,7 @@ The mechanics live in one command, `bin/coddy`, with no Claude Code
 dependency: Claude Code puts the plugin's `bin/` on the Bash tool's `PATH`
 while the plugin is enabled. claude.ai and Cowork do not install a plugin
 that has a top-level `bin/`, through organisation settings either, so coddy
-needs the Claude Code CLI. To run it from your own terminal or another
-agent, put that directory on your `PATH` or symlink `bin/coddy` into one.
+needs the Claude Code CLI. `get.sh` puts it on your own `PATH`.
 It reads `CODDY_ROOT` (where to look for the project; the working directory
 without it), `CODDY_SESSION` and `CODDY_PID` (the session and process a
 claim is held to) and `CODDY_AGENT_DIR` (the agent's own directory, such as
