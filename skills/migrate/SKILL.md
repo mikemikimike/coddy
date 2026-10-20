@@ -2,7 +2,7 @@
 name: migrate
 description: Bring the project's coddy config up to the current schema version, moving .claude/coddy.yml to .coddy.yml on the way
 when_to_use: Use when the user asks to migrate, upgrade or update the coddy config to the current version, or to move the old .claude/coddy.yml to .coddy.yml, or when onboard or config says to run /coddy:migrate.
-allowed-tools: Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/config.sh"), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" status), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" migrate), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" exclude answers), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" exclude config), Bash(git -C * ls-files --error-unmatch .claude/coddy.yml), Bash(date +%Y%m%d-%H%M%S)
+allowed-tools: Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/config.sh"), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" status), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" migrate), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" exclude answers), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" exclude config), Bash(date +%Y%m%d-%H%M%S)
 ---
 
 # Migrate
@@ -26,7 +26,7 @@ A section above shows a `bash` command rather than its output → this host does
 3. Show `from:` → `to:` and each `changed:` line, then ask once: migrate now? No → stop, nothing written.
 4. On yes, in this order:
    - `bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" exclude answers`, so the backup stays out of git status.
-   - `changed: move` → run `git -C <root> ls-files --error-unmatch .claude/coddy.yml`; it fails (the file was personal, not tracked) → `bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" exclude config`, so `.coddy.yml` stays personal too.
+   - `tracked: no` (the legacy file was personal, not in git) → `bash "${CLAUDE_PLUGIN_ROOT}/scripts/issue.sh" exclude config`, so `.coddy.yml` stays personal too.
    - `date +%Y%m%d-%H%M%S` once, as `<ts>`.
    - Back up each file this run writes over or removes: Read it, then Write its content as it is to `<root>/.claude/coddy/backup/<ts>/<its path>` (the source, and `.claude/coddy.yml` on `changed: remove`).
    - A `---` block printed → Write everything after the `---` line to `<root>/.coddy.yml` (Read it first when it exists); the guard asks the user to allow it. Refused → stop and say the backup is at `<root>/.claude/coddy/backup/<ts>/`.

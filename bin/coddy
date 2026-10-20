@@ -402,7 +402,7 @@ if [ "${1-}" = forget ]; then
   echo "removed: $f"; exit 0
 fi
 # The config brought up to the current schema version: from:, to:, one
-# changed: line per change, then --- and the migrated file, every line and
+# changed: line per change (tracked: after a move), then --- and the migrated file, every line and
 # comment kept; no --- block when the file itself needs no change. Read-only:
 # a shell write to the config is undone by trip, so /coddy:migrate writes it
 # with the Write tool. No version is 0, the layout from before .coddy.yml.
@@ -411,13 +411,16 @@ fi
 m1() { echo "version: 1"; grep -v '^version:' || true; }
 d1="add version: 1"
 if [ "${1-}" = migrate ]; then
-  cur=1 v=$(cfg version); v="${v:-0}"
+  cur=1 v=$(cfg version | tr -d '\r'); v="${v:-0}"
   case "$v" in *[!0-9]*) die "version in $cname is not a whole number: $v" ;; esac
   [ "$v" -le "$cur" ] || die "$cname is at version $v, newer than this coddy knows ($cur): update the coddy plugin"
   echo "from: $v"; echo "to: $cur"
   out=$(cat "$conf") n=$v
   while [ "$n" -lt "$cur" ]; do n=$((n + 1)); out=$(printf '%s\n' "$out" | "m$n"); d="d$n"; echo "changed: ${!d}"; done
+  # tracked: whether git tracks the legacy file, so the skill keeps a personal
+  # config personal without a git rule of its own in allowed-tools.
   if [ "$cname" = "$legacy" ]; then echo "changed: move $legacy -> .coddy.yml"
+    if git ls-files --error-unmatch -- "$legacy" >/dev/null 2>&1; then echo "tracked: yes"; else echo "tracked: no"; fi
   elif [ -e "$legacy" ] || [ -L "$legacy" ]; then echo "changed: remove $legacy"; fi
   { [ "$v" -lt "$cur" ] || [ "$cname" = "$legacy" ]; } || exit 0
   echo "---"; printf '%s\n' "$out"; exit 0

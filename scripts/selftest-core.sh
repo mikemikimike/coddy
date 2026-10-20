@@ -156,6 +156,13 @@ cp .claude/coddy.yml "$tmp/v0.yml"
 t 0 "migrate: a legacy file without version is 0" says '^from: 0$' run migrate
 t 0 "migrate: says it adds the version" says '^changed: add version: 1$' run migrate
 t 0 "migrate: and moves the legacy file" says '^changed: move .claude/coddy.yml -> .coddy.yml$' run migrate
+t 0 "migrate: says an untracked legacy file is untracked" says '^tracked: no$' run migrate
+git add -f .claude/coddy.yml
+t 0 "migrate: and a tracked one tracked" says '^tracked: yes$' run migrate
+git rm -q --cached .claude/coddy.yml
+printf 'version: 0\r\ntracker: github\r\n' > .claude/coddy.yml
+t 0 "migrate: a CRLF config reads its version" says '^from: 0$' run migrate
+cp "$tmp/v0.yml" .claude/coddy.yml
 t 0 "migrate: the file after --- is the expected v1, comments kept" sh -c "'$here/bin/coddy' migrate | sed '1,/^---\$/d' | cmp -s - '$tmp/v1.yml'"
 t 0 "migrate: writes nothing" cmp -s .claude/coddy.yml "$tmp/v0.yml"
 t 1 "migrate: and makes no .coddy.yml" test -e .coddy.yml
