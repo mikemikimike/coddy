@@ -133,7 +133,9 @@ rm .claude/coddy.yml
 t 0 "config: .coddy.yml alone" says '^roadmap: R.md$' run config
 t 0 "detect: no legacy config next to .coddy.yml" says '^legacy_config: none$' run detect
 t 0 "detect: .coddy.yml is not ignored" says '^config_ignored: no$' run detect
+printf '*.log' >> .git/info/exclude # a last line without its newline
 t 0 "exclude config: appends .coddy.yml" says '^excluded: .coddy.yml$' run exclude config
+t 0 "exclude config: on a line of its own, the last line left whole" grep -qx '\*\.log' .git/info/exclude
 t 0 "detect: .coddy.yml is ignored once excluded" says '^config_ignored: yes$' run detect
 t 0 "exclude config: is a no-op the second time" says '^ignored already: .coddy.yml$' run exclude config
 t 0 "exclude config: one line" test "$(grep -cx '.coddy.yml' .git/info/exclude)" = 1

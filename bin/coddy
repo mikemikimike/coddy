@@ -155,7 +155,8 @@ if [ "${1-}" = exclude ]; then
   esac
   cd "$root" || die "cannot enter $root"
   git check-ignore -q "$p" 2>/dev/null && { echo "ignored already: $p"; exit 0; }
-  x=$(git rev-parse --git-path info/exclude 2>/dev/null) && mkdir -p "${x%/*}" && echo "$p" >> "$x" || die "could not write $p to git's info/exclude"
+  # A last line without its newline would take the pattern as its tail.
+  x=$(git rev-parse --git-path info/exclude 2>/dev/null) && mkdir -p "${x%/*}" && { [ ! -s "$x" ] || [ -z "$(tail -c1 "$x")" ] || echo; echo "$p"; } >> "$x" || die "could not write $p to git's info/exclude"
   echo "excluded: $p"; exit 0
 fi
 

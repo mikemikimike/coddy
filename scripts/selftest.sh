@@ -276,7 +276,7 @@ leg() {
   kept "uncommitted changes"
   t 0 "$tool: and says so" says "holds uncommitted work" run sweep
   rm ".worktrees/$p/wip.txt"
-  CLAUDE_PROJECT_DIR="$repo/.worktrees/$p" bash "$here/scripts/issue.sh" sweep >/dev/null 2>&1
+  (cd ".worktrees/$p" && CLAUDE_PROJECT_DIR="$repo/.worktrees/$p" bash "$here/scripts/issue.sh" sweep) >/dev/null 2>&1
   t 0 "$tool: sweep keeps the worktree the session is in" test -d ".worktrees/$p"
   echo "sess-b 1" > ".git/coddy/$p/owner" # claimed by another session whose process runs
   kept "a merged worktree another running session holds"
@@ -456,12 +456,12 @@ t 0 "claim records the claiming process's start time" grep -qx "sess-a $$ $start
 rm -r .git/coddy/other; : > .git/coddy/other
 t 0 "issue.sh status owners: a marker from before locks is unknown" owns "other=unknown"
 rm .git/coddy/other
-t 0 "config.sh finds the config from inside a worktree" sh -c "CLAUDE_PROJECT_DIR='$repo/.worktrees/43' bash '$here/scripts/config.sh' | grep -q '^tracker:'"
+t 0 "config.sh finds the config from inside a worktree" sh -c "cd '$repo/.worktrees/43' && CLAUDE_PROJECT_DIR='$repo/.worktrees/43' bash '$here/scripts/config.sh' | grep -q '^tracker:'"
 # rooted <dir>: a session opened in that directory gets the project root from
 # every script: issue.sh status prints it, config.sh and detect.sh find the config,
 # and the guard holds the main checkout's README to it
 rooted() (
-  export CLAUDE_PROJECT_DIR=$1
+  cd "$1" && export CLAUDE_PROJECT_DIR=$1
   bash "$here/scripts/issue.sh" status | grep -qx "root: $repo" || exit 1
   bash "$here/scripts/config.sh" | grep -q '^tracker:' || exit 1
   bash "$here/scripts/detect.sh" | grep -qx 'config: present' || exit 1
@@ -473,6 +473,19 @@ mkdir -p sub/dir; git worktree add -q .claude/worktrees/x 2>/dev/null
 for d in "" /sub/dir /.worktrees/43 /.claude/worktrees/x; do t 0 "root: resolved from ${d:-the repo root}" rooted "$repo$d"; done
 [ ! -d .worktrees/42 ] || t 0 "root: resolved from a jj workspace" rooted "$repo/.worktrees/42"
 git worktree remove --force .claude/worktrees/x; rm -r sub
+# A .claude/settings.json env overrides CLAUDE_PROJECT_DIR in the Bash tool's
+# environment (the hooks get the real one), so a cloned repository could move
+# the root: every shim takes it only while the working directory is it or
+# under it, compared by real path, and PWD cannot be set from there.
+# from <dir> <CLAUDE_PROJECT_DIR> <root>: run there, every shim resolves that root
+from() { (cd "$1" && export CLAUDE_PROJECT_DIR=$2 && bash "$here/scripts/issue.sh" status | grep -qx "root: $3" && bash "$here/scripts/detect.sh" | grep -qx "root: $3" && { [ "$3" != "$repo" ] || bash "$here/scripts/config.sh" | grep -q '^tracker:'; } && { [ "$3" = "$repo" ] || bash "$here/scripts/config.sh" | grep -qx NOT_ONBOARDED; }); }
+mkdir "$tmp/other" "$tmp/repo2"; ln -s "$repo" "$tmp/link"
+t 0 "shim: a CLAUDE_PROJECT_DIR that does not hold the working directory is ignored" from "$repo" "$tmp/other" "$repo"
+t 0 "shim: so is one that holds it by spelling alone" from "$tmp/repo2" "$repo" "$tmp/repo2"
+t 0 "shim: so is a relative one" from "$repo" .. "$repo"
+t 0 "shim: one above the working directory is honoured" from "$repo" "$tmp" "$tmp"
+t 0 "shim: one naming the working directory by its real path is honoured" from "$tmp/link" "$repo" "$repo"
+rm -r "$tmp/other" "$tmp/repo2" "$tmp/link"
 # detect <line> [VAR=value...]: detect.sh prints exactly that line
 detect() { line=$1; shift; env CLAUDE_PROJECT_DIR="$repo" "$@" "$BASH" "$here/scripts/detect.sh" 2>/dev/null | grep -qx "$line"; }
 t 0 "detect.sh reports an installed jq" detect 'jq: installed'
